@@ -38,7 +38,7 @@ DEFAULT_CUSTOM_TTS_API_SPEAKER = "TOM女"
 DEFAULT_CUSTOM_TTS_API_SPEED = "1"
 DEFAULT_CUSTOM_TTS_API_NOVASR = "1"
 DEFAULT_CLOUD_TTS_PROTOCOL = "minimax"
-DEFAULT_CLOUD_TTS_BASE_URL = "https://novaizi.com/minimax"
+DEFAULT_CLOUD_TTS_BASE_URL = ""  # no vendor baked in; set it on the settings page
 DEFAULT_CLOUD_TTS_MODEL = "speech-2.8-hd"
 DEFAULT_CLOUD_TTS_VOICE = "male-qn-jingying"
 CLOUD_TTS_PROTOCOLS = ("minimax", "openai")
@@ -1346,10 +1346,12 @@ class NarrationService:
         if protocol not in CLOUD_TTS_PROTOCOLS:
             raise RuntimeError(f"cloud_tts protocol must be one of {CLOUD_TTS_PROTOCOLS}, got '{protocol}'")
         base_url = pick("base_url", DEFAULT_CLOUD_TTS_BASE_URL).rstrip("/")
+        if not base_url:
+            raise RuntimeError("cloud_tts provider requires a base URL (settings page: 云端语音 -> 接口地址, or CLOUD_TTS_BASE_URL)")
         model = pick("model", DEFAULT_CLOUD_TTS_MODEL)
         voice_id = (str(voice) if voice is not None else "").strip() or pick("voice", DEFAULT_CLOUD_TTS_VOICE)
         # The editor's default voice is an Edge-TTS name; it is meaningless for cloud vendors.
-        if re.fullmatch(r"[a-z]{2}-[A-Z]{2}-\w+Neural", voice_id):
+        if re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]+)+Neural", voice_id):
             voice_id = pick("voice", DEFAULT_CLOUD_TTS_VOICE)
         rate = (rate or "+0%").strip()
         speed = self._cloud_tts_speed_from_rate(rate)
@@ -1468,9 +1470,25 @@ class NarrationService:
                     tmp_dir = tempfile.mkdtemp(prefix="landppt_tts_", dir=base_dir)
                     try:
                         tmp_path = os.path.join(tmp_dir, filename)
-                        with open(tmp_path, "wb") as f:
-                            for part in audio_parts:
-                                f.write(part)
+                        if len(audio_parts) == 1:
+                            with open(tmp_path, "wb") as f:
+                                f.write(audio_parts[0])
+                        else:
+                            # Appending raw mp3 files gives a wrong duration; re-encode into one stream.
+                            list_path = os.path.join(tmp_dir, "concat_list.txt")
+                            with open(list_path, "w", encoding="utf-8") as lf:
+                                for i, part in enumerate(audio_parts):
+                                    part_path = os.path.join(tmp_dir, f"part_{i}.mp3")
+                                    with open(part_path, "wb") as f:
+                                        f.write(part)
+                                    lf.write(f"file '{str(Path(part_path).resolve())}'\n")
+                            code, _, err = await _run_subprocess([
+                                "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_path,
+                                "-vn", "-c:a", "libmp3lame", "-b:a", "128k", tmp_path,
+                            ])
+                            if code != 0 or not os.path.exists(tmp_path) or os.path.getsize(tmp_path) == 0:
+                                last = (err.splitlines()[-1] if err else "").strip()
+                                raise RuntimeError(f"cloud_tts audio merge failed: {last or 'unknown error'}")
                         os.replace(tmp_path, out_path)
                     finally:
                         shutil.rmtree(tmp_dir, ignore_errors=True)

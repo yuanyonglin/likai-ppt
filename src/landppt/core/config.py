@@ -638,7 +638,7 @@ class AppConfig(BaseSettings):
     # Cloud TTS (OpenAI-compatible /v1/audio/speech or MiniMax t2a_v2, via any relay or vendor)
     cloud_tts_protocol: str = Field(default="minimax", env="CLOUD_TTS_PROTOCOL")
     cloud_tts_api_key: Optional[str] = Field(default=None, env="CLOUD_TTS_API_KEY")
-    cloud_tts_base_url: str = Field(default="https://novaizi.com/minimax", env="CLOUD_TTS_BASE_URL")
+    cloud_tts_base_url: str = Field(default="", env="CLOUD_TTS_BASE_URL")
     cloud_tts_model: str = Field(default="speech-2.8-hd", env="CLOUD_TTS_MODEL")
     cloud_tts_voice: str = Field(default="male-qn-jingying", env="CLOUD_TTS_VOICE")
 

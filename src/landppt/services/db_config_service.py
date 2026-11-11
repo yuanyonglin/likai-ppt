@@ -118,7 +118,7 @@ class DatabaseConfigService:
             "mimo_tts_voice_prompt": {"type": "textarea", "category": "generation_params", "default": "年轻、放松、语速偏快，像 Tom 猫那种俏皮又有点夸张的卡通感；说话轻快自然、有活力，吐字清楚，不要正式播音腔。"},
             "cloud_tts_protocol": {"type": "text", "category": "generation_params", "default": "minimax"},
             "cloud_tts_api_key": {"type": "password", "category": "generation_params", "default": ""},
-            "cloud_tts_base_url": {"type": "url", "category": "generation_params", "default": "https://novaizi.com/minimax"},
+            "cloud_tts_base_url": {"type": "url", "category": "generation_params", "default": ""},
             "cloud_tts_model": {"type": "text", "category": "generation_params", "default": "speech-2.8-hd"},
             "cloud_tts_voice": {"type": "text", "category": "generation_params", "default": "male-qn-jingying"},
             "custom_tts_api_url": {"type": "url", "category": "generation_params", "default": "http://localhost:9880/"},
