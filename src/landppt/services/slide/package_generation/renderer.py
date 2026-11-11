@@ -56,6 +56,26 @@ def _safe_asset_url(url: str) -> bool:
     )
 
 
+def _set_text(node, value: str) -> None:
+    """Fill a text slot; each line of a multi-line value becomes its own paragraph.
+
+    Paragraphs are tspans with an ``x`` break, which the text layout wraps and
+    positions line by line (plain newlines would collapse into spaces in SVG).
+    """
+    lines = [line.strip() for line in value.split("\n") if line.strip()]
+    if len(lines) <= 1:
+        node.text = lines[0] if lines else value
+        return
+    for child in list(node):
+        node.remove(child)
+    namespace = node.tag[: node.tag.index("}") + 1] if node.tag.startswith("{") else ""
+    node.text = lines[0]
+    for line in lines[1:]:
+        tspan = node.makeelement(f"{namespace}tspan", {"x": node.get("x", "0"), "dy": "1em"})
+        tspan.text = line
+        node.append(tspan)
+
+
 def render_page(
     package: TemplatePackage,
     component_id: str,
@@ -89,7 +109,7 @@ def render_page(
         node = nodes[slot.node_id]
         value = fields.get(slot.field, "")
         if slot.kind == "text":
-            node.text = value
+            _set_text(node, value)
         elif not value:
             node.getparent().remove(node)
         else:

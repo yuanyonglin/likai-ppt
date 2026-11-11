@@ -70,3 +70,31 @@ def test_slot_writer_rejects_invalid_copy_without_dropping_it(defect):
         raw["fields"]["title"] = "字" * 1000
     with pytest.raises(ValueError):
         content_from_fields(raw, component)
+
+
+def test_multiline_body_renders_one_line_per_point():
+    package = load_builtin_package()
+    component = next(c for c in package.components if c.id == "points_3")
+    raw = reply(component)
+    raw["fields"]["blocks[0].body"] = "1. 第一条要点\n2. 第二条要点"
+    content = content_from_fields(raw, component)
+    root = parse_svg(render_page(package, component.id, content).svg)
+    body = next(s for s in component.slots if s.field == "blocks[0].body")
+    node = next(n for n in root.iter() if n.get("id") == body.node_id)
+    lines = ["".join(t.itertext()).strip() for t in node if t.tag.endswith("tspan")]
+    assert "1. 第一条要点" in lines
+    assert "2. 第二条要点" in lines
+
+
+@pytest.mark.asyncio
+async def test_prompt_asks_for_full_multi_point_bodies():
+    package = mixed_package()
+    component = package.components[0]
+    service = ContentService(None)
+    service.json_completion = AsyncMock(return_value=({"pages": [reply(component)]}, {}))
+    await service.expand(
+        {"outline": {}}, package, [{"slide_id": "page1", "layout": component.id}]
+    )
+    prompt = service.json_completion.call_args.args[0]
+    assert "六到八成" in prompt
+    assert "一句正文直接表达" not in prompt
