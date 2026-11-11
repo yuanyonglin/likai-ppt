@@ -1,5 +1,5 @@
 """
-Email service for LandPPT - handles sending verification codes
+Email service for 立铠 PPT - handles sending verification codes
 """
 
 import smtplib
@@ -44,7 +44,7 @@ async def send_email(to_email: str, subject: str, html_content: str) -> Tuple[bo
 
             def _send():
                 resend.api_key = app_config.resend_api_key
-                from_name = (app_config.resend_from_name or "LandPPT").strip()
+                from_name = (app_config.resend_from_name or "立铠 PPT").strip()
                 from_value = (
                     f"{from_name} <{app_config.resend_from_email}>"
                     if from_name
@@ -214,10 +214,10 @@ async def send_verification_email(
     
     # Prepare email content
     if code_type == 'register':
-        subject = "LandPPT 注册验证码"
+        subject = "立铠 PPT 注册验证码"
         action = "注册账户"
     else:
-        subject = "LandPPT 密码重置验证码"
+        subject = "立铠 PPT 密码重置验证码"
         action = "重置密码"
     
     html_content = f"""
@@ -236,13 +236,13 @@ async def send_verification_email(
     </head>
     <body>
         <div class="container">
-            <div class="logo">LandPPT</div>
+            <div class="logo">立铠 PPT</div>
             <p>您好，</p>
             <p>您正在{action}，请使用以下验证码完成验证：</p>
             <div class="code">{code}</div>
             <p class="info">验证码有效期为 {app_config.verification_code_expire_minutes} 分钟。如果您没有进行此操作，请忽略此邮件。</p>
             <div class="footer">
-                © LandPPT - AI PPT 生成平台
+                © 立铠 PPT - AI PPT 生成平台
             </div>
         </div>
     </body>

@@ -103,6 +103,8 @@ async def web_home(
     user: User = Depends(get_current_user_required)
 ):
     """Product showcase for new and returning users, independent of their projects."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/dashboard", status_code=302)
     sponsors = []
     try:
         settings = await community_service.get_settings()
@@ -181,7 +183,7 @@ async def web_ai_config(
             # Ollama is a local provider; treat it as configured when local models are enabled.
             return _has_value(current_config.get("enable_local_models"))
         if name == "landppt":
-            # LandPPT credentials are system-scoped; non-admin users can still use it if configured.
+            # 立铠 PPT credentials are system-scoped; non-admin users can still use it if configured.
             return _has_value(system_config.get("landppt_api_key")) and _has_value(system_config.get("landppt_base_url"))
 
         return False
@@ -206,7 +208,7 @@ async def get_ai_providers_config(
     request: Request,
     user: User = Depends(get_current_user_required)
 ):
-    """Get AI providers configuration for the current user (LandPPT system credentials are hidden for non-admins)."""
+    """Get AI providers configuration for the current user (立铠 PPT system credentials are hidden for non-admins)."""
     from ...services.db_config_service import get_db_config_service
 
     config_service = get_db_config_service()
@@ -214,7 +216,7 @@ async def get_ai_providers_config(
     current_config = await config_service.get_all_config(user_id=user.id)
     
     # Return the config with the relevant provider keys.
-    # LandPPT API key / base URL are system-level admin-only values and should not be exposed to non-admin users.
+    # 立铠 PPT API key / base URL are system-level admin-only values and should not be exposed to non-admin users.
     config: Dict[str, Any] = {
         "openai_api_key": current_config.get("openai_api_key", ""),
         "openai_base_url": current_config.get("openai_base_url", ""),
@@ -254,7 +256,7 @@ async def update_ai_providers_config(
     Update AI provider configuration.
 
     - Normal users can only update their own provider keys.
-    - Admin-only keys (e.g. LandPPT API key/base URL) are accepted only for admins and are stored at system scope.
+    - Admin-only keys (e.g. 立铠 PPT API key/base URL) are accepted only for admins and are stored at system scope.
     """
     from ...services.db_config_service import get_db_config_service
 
@@ -530,7 +532,7 @@ async def get_landppt_models(
     request: Request,
     user: User = Depends(get_current_user_required)
 ):
-    """Get LandPPT models - fetched server-side using system config (no credentials exposed)"""
+    """Get 立铠 PPT models - fetched server-side using system config (no credentials exposed)"""
     import aiohttp
     from ...services.db_config_service import get_db_config_service
 
@@ -543,14 +545,14 @@ async def get_landppt_models(
         base_url = system_config.get("landppt_base_url", "")
         
         if not api_key or not base_url:
-            return {"success": False, "error": "LandPPT 系统配置未设置", "models": []}
+            return {"success": False, "error": "立铠 PPT 系统配置未设置", "models": []}
         
         # Ensure base URL ends with /v1
         if not base_url.endswith('/v1'):
             base_url = base_url.rstrip('/') + '/v1'
         
         models_url = f"{base_url}/models"
-        logger.info(f"Fetching LandPPT models from: {models_url}")
+        logger.info(f"Fetching 立铠 PPT models from: {models_url}")
         timeout_seconds = await _get_llm_timeout_seconds_for_user(user.id)
         
         async with aiohttp.ClientSession() as session:
@@ -571,14 +573,14 @@ async def get_landppt_models(
                     if 'data' in data and isinstance(data['data'], list):
                         models = sorted([m['id'] for m in data['data'] if m.get('id')])
                     
-                    logger.info(f"Successfully fetched {len(models)} LandPPT models")
+                    logger.info(f"Successfully fetched {len(models)} 立铠 PPT models")
                     return {"success": True, "models": models}
                 else:
                     error_text = await response.text()
-                    logger.error(f"Failed to fetch LandPPT models: {response.status} - {error_text}")
+                    logger.error(f"Failed to fetch 立铠 PPT models: {response.status} - {error_text}")
                     return {"success": False, "error": f"请求失败: {response.status}", "models": []}
     except Exception as e:
-        logger.error(f"Error fetching LandPPT models: {e}")
+        logger.error(f"Error fetching 立铠 PPT models: {e}")
         return {"success": False, "error": str(e), "models": []}
 
 
@@ -600,7 +602,7 @@ async def test_provider_connection(
 
         config_service = get_db_config_service()
 
-        # LandPPT 使用系统级配置，其余提供商使用用户配置。
+        # 立铠 PPT 使用系统级配置，其余提供商使用用户配置。
         if provider == 'landppt':
             config = await config_service.get_all_config(user_id=None)
         else:
@@ -756,7 +758,7 @@ async def test_provider_connection(
                     logger.error("%s connection test failed: %s - %s", provider, response.status, error_text)
                     return {"success": False, "error": f"请求失败: {response.status}"}
 
-            # OpenAI、LandPPT 等兼容服务继续沿用 OpenAI 协议。
+            # OpenAI、立铠 PPT 等兼容服务继续沿用 OpenAI 协议。
             if not base_url.endswith('/v1'):
                 base_url = base_url.rstrip('/') + '/v1'
 

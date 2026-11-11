@@ -151,7 +151,7 @@ class ResearchReportGenerator:
         # Footer
         content.append("---")
         content.append("")
-        content.append("*本报告由 LandPPT DEEP Research 系统自动生成*")
+        content.append("*本报告由 立铠 PPT DEEP Research 系统自动生成*")
         content.append("")
         content.append(f"*生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
         

@@ -3,7 +3,7 @@ import { Alert, Button, Card, Form, Input, InputNumber, Radio, Result, Select, S
 import { type ApiData } from '../api';
 import { AdminPage, useAdminConfig } from '../components/admin';
 
-const mailDefaults: ApiData = { email_provider: 'smtp', smtp_host: '', smtp_port: 465, smtp_user: '', smtp_password: '', smtp_use_ssl: true, smtp_from_email: '', smtp_from_name: 'LandPPT', resend_api_key: '', resend_from_email: '', resend_from_name: 'LandPPT' };
+const mailDefaults: ApiData = { email_provider: 'smtp', smtp_host: '', smtp_port: 465, smtp_user: '', smtp_password: '', smtp_use_ssl: true, smtp_from_email: '', smtp_from_name: '立铠 PPT', resend_api_key: '', resend_from_email: '', resend_from_name: '立铠 PPT' };
 function mailConfig(config: ApiData) {
   const values = Object.fromEntries(Object.keys(mailDefaults).map(key => [key, config[key] ?? mailDefaults[key]]));
   values.email_provider = String(values.email_provider).toLowerCase() === 'resend' ? 'resend' : 'smtp';

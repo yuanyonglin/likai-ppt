@@ -1,5 +1,5 @@
 """
-Notification service for LandPPT.
+Notification service for 立铠 PPT.
 
 Delivers a single event through two channels:
   * in-app  - a row in the `notifications` table, surfaced by the nav bell
@@ -115,7 +115,7 @@ def render_email_html(
     action_url: Optional[str] = None,
     action_text: str = "打开项目",
 ) -> str:
-    """Render the standard LandPPT notification email.
+    """Render the standard 立铠 PPT notification email.
 
     detail_rows is a list of (label, value) pairs rendered as a definition table.
     All caller-supplied text is HTML-escaped.
@@ -157,7 +157,7 @@ def render_email_html(
     <head><meta charset="UTF-8"></head>
     <body style="margin:0;padding:24px;background:#f5f5f5;font-family:'Inter',-apple-system,'Segoe UI',Arial,sans-serif;">
         <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;padding:40px;box-shadow:0 4px 20px rgba(0,0,0,0.08);">
-            <div style="font-size:24px;font-weight:700;color:#111111;margin-bottom:24px;">LandPPT</div>
+            <div style="font-size:24px;font-weight:700;color:#111111;margin-bottom:24px;">立铠 PPT</div>
             <div style="border-left:3px solid {accent};padding-left:16px;margin-bottom:20px;">
                 <div style="font-size:18px;font-weight:600;color:#111111;">{html.escape(title)}</div>
             </div>
@@ -165,7 +165,7 @@ def render_email_html(
             {detail_html}
             {action_html}
             <div style="color:#9ca3af;font-size:12px;margin-top:32px;padding-top:20px;border-top:1px solid #eeeeee;">
-                此邮件由 LandPPT 无人值守任务自动发送。如需关闭，请在「系统配置 → 生成参数 → 无人值守」中取消邮件通知。
+                此邮件由 立铠 PPT 无人值守任务自动发送。如需关闭，请在「系统配置 → 生成参数 → 无人值守」中取消邮件通知。
             </div>
         </div>
     </body>
@@ -226,7 +226,7 @@ async def notify_user(
 
                 success, message = await send_email(
                     email,
-                    email_subject or f"LandPPT · {title}",
+                    email_subject or f"立铠 PPT · {title}",
                     render_email_html(
                         title=title,
                         body=body,

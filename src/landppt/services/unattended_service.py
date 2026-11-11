@@ -1161,7 +1161,7 @@ async def send_completion_notification(
         },
         send_in_app=bool(config.get("notify_in_app", True)),
         send_email_notification=bool(config.get("notify_email", False)),
-        email_subject=f"LandPPT · {title}",
+        email_subject=f"立铠 PPT · {title}",
         email_detail_rows=detail_rows,
         email_action_url=_project_link(str(project_id)) if project_id else None,
     )

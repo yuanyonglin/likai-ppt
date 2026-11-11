@@ -191,7 +191,7 @@ else:
 async def root():
     """Open the product homepage; the workspace remains at /dashboard."""
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/home", status_code=302)
+    return RedirectResponse(url="/dashboard", status_code=302)
 
 @app.get("/favicon.ico")
 async def favicon():

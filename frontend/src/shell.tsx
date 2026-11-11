@@ -112,14 +112,14 @@ export const Shell = memo(function Shell({ data, children }: { data: ShellData; 
   return <div className={`app-shell${data.page === 'home' ? ' home-shell' : ''}${authPage ? ' auth-shell' : ''}${collapsed ? ' sidebar-collapsed' : ''}${['slides-editor', 'generator-workspace', 'project-detail', 'todo'].includes(data.page) ? ' workspace-shell' : ''}`}>
     <a className="skip-link" href="#appMain">跳到主内容</a>
     {!authPage && <aside className="app-sidebar" aria-label="应用侧栏">
-      <div className="sidebar-brand-row"><a className="app-brand" href="/home" aria-label="LandPPT 首页"><BrandSymbol /><span className="sidebar-wordmark">LandPPT</span></a><Button type="text" aria-label={collapsed ? '展开导航' : '收起导航'} aria-expanded={!collapsed} icon={collapsed ? <MenuUnfoldOutlined aria-hidden /> : <MenuFoldOutlined aria-hidden />} onClick={() => setCollapsed(value => !value)} /></div>
+      <div className="sidebar-brand-row"><a className="app-brand" href="/home" aria-label="立铠 PPT 首页"><BrandSymbol /><span className="sidebar-wordmark">立铠 PPT</span></a><Button type="text" aria-label={collapsed ? '展开导航' : '收起导航'} aria-expanded={!collapsed} icon={collapsed ? <MenuUnfoldOutlined aria-hidden /> : <MenuFoldOutlined aria-hidden />} onClick={() => setCollapsed(value => !value)} /></div>
       {collapsed ? <Tooltip title="搜索项目" placement="right"><Button type="text" aria-label="搜索项目" href="/projects" icon={<SearchOutlined aria-hidden />} /></Tooltip> : searchForm}
       {navigation}{data.page !== 'home' && recentProjects}
       <div className="sidebar-bottom">{data.creditsEnabled && <a className="sidebar-credits" href="/credits" aria-current={location.pathname === '/credits' ? 'page' : undefined}><span aria-hidden>◈</span><span className="app-nav-label">我的积分</span></a>}<a href="/ai-config" aria-label="系统配置"><SettingOutlined aria-hidden /><span className="app-nav-label">系统配置</span></a>{(sponsorsEnabled || data.user?.is_admin) && <a id="navSponsorLink" href="/sponsors"><HeartOutlined aria-hidden /><span className="app-nav-label">{sponsorsEnabled ? '赞助感谢' : '赞助预览'}</span></a>}</div>
     </aside>}
     <div className="app-body"><header className="app-header">
       {!authPage && <Button ref={menuTrigger} className="mobile-menu" type="text" aria-label="菜单" aria-expanded={menuOpen} icon={<MenuOutlined aria-hidden />} onClick={() => setMenuOpen(true)} />}
-      <a className="app-brand mobile-brand" href="/home">LandPPT</a>
+      <a className="app-brand mobile-brand" href="/home">立铠 PPT</a>
       {authPage ? <Space size={8} className="app-account"><AppearanceToggle /><Button href="/home">返回首页</Button></Space> : <Space size={8} className="app-account"><AppearanceToggle className="app-appearance" />
         <Tooltip title="系统配置" trigger={['hover', 'focus']}><Button className="app-settings" type="text" href="/ai-config" aria-label="系统配置" icon={<SettingOutlined aria-hidden />} /></Tooltip>
         {data.user ? <><Button type="text" id="navNotificationBell" aria-label="通知" icon={<BellOutlined aria-hidden />}><span id="navNotificationBadge" hidden>0</span></Button>
@@ -137,6 +137,6 @@ export const Shell = memo(function Shell({ data, children }: { data: ShellData; 
     <SiteAnnouncement notice={notice} />
     <NotificationDrawer open={notificationOpen} state={notifications} center={center.current} />
     <ShellMain className={`app-main${authPage ? ' auth-main' : ''}${data.page === 'home' ? ' home-main' : ''}`}>{children}</ShellMain>
-    {data.page === 'home' && <footer className="app-footer"><span>LandPPT · v{version}</span><a href="/home">产品首页</a><Tooltip title="GitHub" trigger={['hover', 'focus']}><a className="app-footer-icon" aria-label="GitHub" href="https://github.com/sligter/LandPPT" target="_blank" rel="noreferrer"><GithubOutlined aria-hidden /></a></Tooltip>{(sponsorsEnabled || data.user?.is_admin) && <a id="footerSponsorLink" className="app-footer-sponsor" href="/sponsors"><HeartOutlined aria-hidden />{sponsorsEnabled ? '赞助感谢' : '赞助预览'}</a>}<Tooltip title="商务合作" trigger={['hover', 'focus']}><a className="app-footer-icon" aria-label="商务合作" href="mailto:support@landppt.com"><MailOutlined aria-hidden /></a></Tooltip></footer>}
+    {data.page === 'home' && <footer className="app-footer"><span>立铠 PPT · v{version}</span><a href="/home">产品首页</a>{(sponsorsEnabled || data.user?.is_admin) && <a id="footerSponsorLink" className="app-footer-sponsor" href="/sponsors"><HeartOutlined aria-hidden />{sponsorsEnabled ? '赞助感谢' : '赞助预览'}</a>}</footer>}
   </div></div>;
 });

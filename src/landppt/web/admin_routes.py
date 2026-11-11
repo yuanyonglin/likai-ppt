@@ -60,10 +60,10 @@ class SMTPConfigRequest(BaseModel):
     smtp_password: str = ""
     smtp_use_ssl: bool = True
     smtp_from_email: str = ""
-    smtp_from_name: str = "LandPPT"
+    smtp_from_name: str = "立铠 PPT"
     resend_api_key: str = ""
     resend_from_email: str = ""
-    resend_from_name: str = "LandPPT"
+    resend_from_name: str = "立铠 PPT"
     test_email: Optional[str] = None  # For test endpoint
     test_subject: Optional[str] = None  # Custom test email subject
     test_content: Optional[str] = None  # Custom test email content
@@ -337,7 +337,7 @@ def _extract_model_ids(payload: object) -> List[str]:
 
 
 async def _fetch_landppt_models_with_credentials(api_key: str, base_url: str, timeout_seconds: int) -> List[str]:
-    """通过后端代理请求 LandPPT 模型列表。"""
+    """通过后端代理请求 立铠 PPT 模型列表。"""
     import aiohttp
 
     models_url = f"{_normalize_openai_compatible_base_url(base_url)}/models"
@@ -353,7 +353,7 @@ async def _fetch_landppt_models_with_credentials(api_key: str, base_url: str, ti
         ) as response:
             if response.status != 200:
                 error_text = await response.text()
-                logger.error("Failed to fetch system LandPPT models: %s - %s", response.status, error_text)
+                logger.error("Failed to fetch system 立铠 PPT models: %s - %s", response.status, error_text)
                 raise HTTPException(status_code=400, detail=f"获取模型列表失败: HTTP {response.status}")
 
             payload = await response.json(content_type=None)
@@ -409,7 +409,7 @@ async def get_system_landppt_models(
     data: SystemLandPptModelsRequest,
     user: User = Depends(get_admin_user_required),
 ):
-    """优先使用后台当前表单值代理拉取 LandPPT 模型列表。"""
+    """优先使用后台当前表单值代理拉取 立铠 PPT 模型列表。"""
     from ..services.db_config_service import get_db_config_service, get_user_llm_timeout_seconds
 
     try:
@@ -420,7 +420,7 @@ async def get_system_landppt_models(
         base_url = (data.base_url or "").strip() or str(system_config.get("landppt_base_url") or "").strip()
 
         if not api_key:
-            return {"success": False, "error": "请先填写 LandPPT API Key", "models": []}
+            return {"success": False, "error": "请先填写 立铠 PPT API Key", "models": []}
 
         timeout_seconds = await get_user_llm_timeout_seconds(user.id)
         models = await _fetch_landppt_models_with_credentials(
@@ -437,7 +437,7 @@ async def get_system_landppt_models(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error("Failed to fetch system LandPPT models: %s", exc)
+        logger.error("Failed to fetch system 立铠 PPT models: %s", exc)
         raise HTTPException(status_code=500, detail=f"获取模型列表失败: {exc}")
 
 
@@ -630,14 +630,14 @@ async def test_smtp_config(
     if not data.test_email:
         return {"success": False, "message": "请提供测试收件邮箱"}
 
-    default_subject = "LandPPT 测试邮件"
+    default_subject = "立铠 PPT 测试邮件"
     default_html = """
     <html>
     <body style="font-family: Arial, sans-serif; padding: 20px;">
         <h2>🎉 邮件配置测试成功！</h2>
-        <p>如果您收到这封邮件，说明 LandPPT 的邮件服务已正确配置。</p>
+        <p>如果您收到这封邮件，说明 立铠 PPT 的邮件服务已正确配置。</p>
         <hr>
-        <p style="color: #666; font-size: 12px;">Copyright © 2026 LandPPT. All rights reserved.</p>
+        <p style="color: #666; font-size: 12px;">Copyright © 2026 立铠 PPT. All rights reserved.</p>
     </body>
     </html>
     """
@@ -665,7 +665,7 @@ async def test_smtp_config(
 
             def _send():
                 resend.api_key = data.resend_api_key
-                from_name = (data.resend_from_name or "LandPPT").strip()
+                from_name = (data.resend_from_name or "立铠 PPT").strip()
                 from_value = f"{from_name} <{data.resend_from_email}>" if from_name else data.resend_from_email
                 params: resend.Emails.SendParams = {
                     "from": from_value,
@@ -791,7 +791,7 @@ async def test_smtp_invite(
 <body style="font-family: 'Segoe UI', Arial, sans-serif; background:#f8fafc; padding:0; margin:0;">
   <div style="max-width:520px; margin:30px auto; background:#fff; border-radius:12px; box-shadow:0 2px 12px rgba(0,0,0,.08); overflow:hidden;">
     <div style="background:#111111; padding:28px 32px;">
-      <h2 style="margin:0; color:#fff; font-size:22px;">🎉 LandPPT 邀请码</h2>
+      <h2 style="margin:0; color:#fff; font-size:22px;">🎉 立铠 PPT 邀请码</h2>
       <p style="margin:8px 0 0; color:rgba(255,255,255,.7); font-size:14px;">您收到了一个注册邀请码</p>
     </div>
     <div style="padding:28px 32px;">
@@ -806,13 +806,13 @@ async def test_smtp_invite(
       <p style="text-align:center; margin:12px 0 0; font-size:12px; color:#94a3b8;">或复制链接：{register_url}</p>
     </div>
     <div style="background:#f8fafc; padding:14px 32px; text-align:center;">
-      <p style="margin:0; font-size:12px; color:#94a3b8;">Copyright © 2026 LandPPT. All rights reserved.</p>
+      <p style="margin:0; font-size:12px; color:#94a3b8;">Copyright © 2026 立铠 PPT. All rights reserved.</p>
     </div>
   </div>
 </body>
 </html>"""
 
-        subject = f"LandPPT 邀请码: {code}"
+        subject = f"立铠 PPT 邀请码: {code}"
         ok, msg = await send_email(email_addr, subject, html_content)
         if ok:
             sent_ok.append(email_addr)

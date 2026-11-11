@@ -411,7 +411,7 @@
                 });
             });
 
-            // LandPPT 默认模型：若用户未配置，默认显示/保存为 MODEL1
+            // 立铠 PPT 默认模型：若用户未配置，默认显示/保存为 MODEL1
             const landpptModelInput = document.getElementById('landppt_model_input');
             if (landpptModelInput && !landpptModelInput.value.trim()) {
                 landpptModelInput.value = 'MODEL1';
@@ -1250,7 +1250,7 @@
             if (success) {
                 content += `
             <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-                <p><strong>提供者:</strong> ${result.provider || 'LandPPT'}</p>
+                <p><strong>提供者:</strong> ${result.provider || '立铠 PPT'}</p>
                 <p><strong>模型:</strong> ${result.model || 'N/A'}</p>
                 <p><strong>响应预览:</strong></p>
                 <div style="background: white; padding: 15px; border-radius: 5px; margin-top: 10px; font-family: monospace; font-size: 0.9em;">
@@ -1605,7 +1605,7 @@
                 // 构建请求体
                 const payload = { provider };
 
-                // 对于 LandPPT，只需获取模型名称（凭证由后端获取）
+                // 对于 立铠 PPT，只需获取模型名称（凭证由后端获取）
                 if (provider === 'landppt') {
                     const modelInput = document.querySelector(`input[name="landppt_model"]`);
                     if (modelInput?.value) payload.model = modelInput.value.trim();
@@ -1727,7 +1727,7 @@
         }
 
         async function fetchProviderModels(provider) {
-            // LandPPT 使用后端 API 获取模型列表（不暴露凭证）
+            // 立铠 PPT 使用后端 API 获取模型列表（不暴露凭证）
             if (provider === 'landppt') {
                 const response = await fetch('/api/ai/providers/landppt/models');
                 if (!response.ok) {
@@ -1737,7 +1737,7 @@
                 if (!result.success) {
                     throw new Error(result.error || '获取模型失败');
                 }
-                // LandPPT 默认模型优先使用 MODEL1（如果存在）
+                // 立铠 PPT 默认模型优先使用 MODEL1（如果存在）
                 return preferModelFirst(sortModelList(result.models || []), 'MODEL1');
             }
 
@@ -1908,7 +1908,7 @@
             try {
                 let models = [];
 
-                // LandPPT 使用后端 API 获取模型列表（不暴露凭证）
+                // 立铠 PPT 使用后端 API 获取模型列表（不暴露凭证）
                 if (provider === 'landppt') {
                     const response = await fetch('/api/ai/providers/landppt/models');
                     if (!response.ok) {

@@ -34,7 +34,7 @@
                     aria-selected="true" aria-controls="panel-system-defaults">
                     <small>System Defaults</small>
                     <strong>系统默认配置</strong>
-                    <span>统一维护默认生成参数、Tavily 与 LandPPT 渠道。</span>
+                    <span>统一维护默认生成参数、Tavily 与 立铠 PPT 渠道。</span>
                 </button>
                 <button class="community-tab" type="button" data-tab-target="notice" role="tab"
                     aria-selected="false" aria-controls="panel-notice">
@@ -70,7 +70,7 @@
                                         <h2><i class="fas fa-sliders"></i> 后台默认配置中心</h2>
                                 <div class="actions-inline">
                                     <button class="btn btn-outline" type="button" id="testSystemDefaultsBtn">
-                                        <i class="fas fa-plug"></i> 测试 LandPPT
+                                        <i class="fas fa-plug"></i> 测试 立铠 PPT
                                     </button>
                                     <button class="btn" type="button" id="saveSystemDefaultsBtn">
                                         <i class="fas fa-floppy-disk"></i> 保存系统默认配置
@@ -88,14 +88,14 @@
                                     <article class="system-config-block">
                                         <div class="system-config-block__header">
                                             <small>AI Defaults</small>
-                                            <h3>默认提供商与 LandPPT 渠道</h3>
-                                            <p>统一设置默认模型来源，支持使用当前表单里的 LandPPT 凭据即时拉取模型列表。</p>
+                                            <h3>默认提供商与 立铠 PPT 渠道</h3>
+                                            <p>统一设置默认模型来源，支持使用当前表单里的 立铠 PPT 凭据即时拉取模型列表。</p>
                                         </div>
                                         <div class="form-grid">
                                             <div class="form-group">
                                                 <label for="system_default_ai_provider">默认 AI 提供商</label>
                                                 <select id="system_default_ai_provider" name="default_ai_provider">
-                                                    <option value="landppt">LandPPT</option>
+                                                    <option value="landppt">立铠 PPT</option>
                                                     <option value="openai">OpenAI</option>
                                                     <option value="anthropic">Anthropic</option>
                                                     <option value="google">Google Gemini</option>
@@ -103,7 +103,7 @@
                                                 </select>
                                             </div>
                                             <div class="form-group">
-                                                <label for="system_landppt_model">LandPPT 默认模型</label>
+                                                <label for="system_landppt_model">立铠 PPT 默认模型</label>
                                                 <div class="system-model-select" id="systemLandPptModelSelect">
                                                     <input type="text" id="system_landppt_model" name="landppt_model"
                                                         placeholder="点击右侧箭头选择，或手动输入" autocomplete="off">
@@ -112,21 +112,21 @@
                                                         <i class="fas fa-chevron-down" aria-hidden="true"></i>
                                                     </button>
                                                     <div class="system-model-dropdown" id="systemLandPptModelDropdown"
-                                                        role="listbox" aria-label="LandPPT 模型列表"></div>
+                                                        role="listbox" aria-label="立铠 PPT 模型列表"></div>
                                                 </div>
                                             </div>
                                             <div class="form-group">
-                                                <label for="system_landppt_base_url">LandPPT Base URL</label>
+                                                <label for="system_landppt_base_url">立铠 PPT Base URL</label>
                                                 <input type="text" id="system_landppt_base_url" name="landppt_base_url"
                                                     placeholder="https://api.openai.com/v1">
                                             </div>
                                             <div class="form-group">
-                                                <label for="system_landppt_api_key">LandPPT API Key</label>
+                                                <label for="system_landppt_api_key">立铠 PPT API Key</label>
                                                 <div class="password-toggle">
                                                     <input type="password" id="system_landppt_api_key" name="landppt_api_key"
                                                         placeholder="sk-...">
                                                     <button type="button" data-toggle-secret="system_landppt_api_key"
-                                                        aria-label="切换 LandPPT API Key 显示状态">
+                                                        aria-label="切换 立铠 PPT API Key 显示状态">
                                                         <i class="fas fa-eye"></i>
                                                     </button>
                                                 </div>

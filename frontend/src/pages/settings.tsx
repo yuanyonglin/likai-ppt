@@ -11,7 +11,7 @@ import ManagedProviders, { useManagedProviders } from '../components/managed-pro
 const categories: Record<string, string> = { 'generation-params': 'generation_params', 'voice-models': 'generation_params', 'app-config': 'app_config', 'image-service': 'image_service' };
 const saveLabels: Record<string, string> = { 'generation-params': '保存生成参数', 'voice-models': '保存语音配置', 'app-config': '保存应用配置', 'image-service': '保存配置' };
 const bool = (value: unknown) => value === true || value === 1 || value === 'true' || value === '1';
-const labels: Record<string, string> = { landppt: 'LandPPT', openai: 'OpenAI', anthropic: 'Anthropic Claude', google: 'Google Gemini' };
+const labels: Record<string, string> = { landppt: '立铠 PPT', openai: 'OpenAI', anthropic: 'Anthropic Claude', google: 'Google Gemini' };
 const JevPanel = memo(JevSettings);
 const tabIcons: Record<string, React.ReactNode> = { 'ai-providers': <ApiOutlined aria-hidden />, 'generation-params': <SlidersOutlined aria-hidden />, 'voice-models': <SoundOutlined aria-hidden />, 'jev-config': <BranchesOutlined aria-hidden />, 'app-config': <SettingOutlined aria-hidden />, 'image-service': <PictureOutlined aria-hidden /> };
 const providerMarks: Record<string, string> = { landppt: 'LP', openai: 'O', anthropic: 'A', google: 'G' };

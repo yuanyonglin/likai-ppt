@@ -1,6 +1,6 @@
 {% extends "antd_base.html" %}
 {% set credits_enabled = true %}
-{% block title %}我的积分 - LandPPT{% endblock %}
+{% block title %}我的积分 - 立铠 PPT{% endblock %}
 {% block page_data %}
 "page": "credits", "balance": {{ (user.credits_balance | default(0)) | tojson }}
 {% endblock %}

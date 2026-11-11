@@ -4,7 +4,7 @@
             <p class="hero-eyebrow">配置中心</p>
             <h2 class="page-title">系统配置管理</h2>
             <p class="page-subtitle">
-                配置和管理 LandPPT 的所有系统参数，包括 AI 提供者、生成参数、应用配置等。
+                配置和管理 立铠 PPT 的所有系统参数，包括 AI 提供者、生成参数、应用配置等。
             </p>
             <!-- <div class="hero-meta">
             <span class="pill pill--solid">当前提供者：{{ current_provider }}</span>
@@ -70,7 +70,7 @@
                             <i class="fas fa-chevron-right provider-chevron" id="chevron_{{ provider }}"
                                 style="transition: transform 0.2s; color: #666; font-size: 12px;"></i>
                             <span style="font-weight: 600; color: #333;">
-                                {% if provider == "landppt" %}LandPPT
+                                {% if provider == "landppt" %}立铠 PPT
                                 {% elif provider == "openai" %}OpenAI
                                 {% elif provider == "anthropic" %}Anthropic Claude
                                 {% elif provider == "google" %}Google Gemini
@@ -112,12 +112,12 @@
                                 <div
                                     style="padding: 12px 14px; border-radius: 8px; border: 1px solid #f0d8ab; background: #fff8e8; color: #8a5a00; font-size: 0.85em; line-height: 1.65;">
                                     {% if user and user.is_admin %}
-                                    LandPPT 系统凭据与系统默认值已迁移到
+                                    立铠 PPT 系统凭据与系统默认值已迁移到
                                     <a href="/admin/community#system-defaults"
                                         style="color: #8a5a00; font-weight: 700;">后台管理 / 系统默认配置</a>；
-                                    这里仅保留当前账号的 LandPPT 模型覆盖设置。
+                                    这里仅保留当前账号的 立铠 PPT 模型覆盖设置。
                                     {% else %}
-                                    LandPPT 的服务凭据由管理员在后台统一维护，这里仅设置当前账号使用的 LandPPT 模型覆盖值。
+                                    立铠 PPT 的服务凭据由管理员在后台统一维护，这里仅设置当前账号使用的 立铠 PPT 模型覆盖值。
                                     {% endif %}
                                 </div>
                             </div>

@@ -193,7 +193,7 @@ const svgPptx = (() => {
         }
         const pptx = exporter.createPresentation();
         pptx.defineLayout({name: 'LANDPPT_SVG', width: 1280 * PX, height: 720 * PX}); pptx.layout = 'LANDPPT_SVG';
-        pptx.author = 'LandPPT'; pptx.subject = mode === 'native' ? 'SVG native objects with vector fallback' : 'SVG vector pages';
+        pptx.author = '立铠 PPT'; pptx.subject = mode === 'native' ? 'SVG native objects with vector fallback' : 'SVG vector pages';
         const frame = document.createElement('iframe');
         frame.setAttribute('sandbox', 'allow-same-origin');
         frame.style.cssText = 'position:fixed;left:-20000px;top:0;width:1280px;height:720px;border:0';
@@ -232,7 +232,7 @@ async function exportSvgPagesToPptx(mode = 'native') {
         });
         throwIfClientExportCancelled(signal);
         const url = URL.createObjectURL(result.blob), a = document.createElement('a');
-        const title = String(window.landpptEditorConfig?.exportTitle || 'LandPPT').replace(/[\\/:*?"<>|]/g, '_');
+        const title = String(window.landpptEditorConfig?.exportTitle || '立铠 PPT').replace(/[\\/:*?"<>|]/g, '_');
         a.href = url; a.download = `${title}-SVG-${mode}.pptx`; document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 60000);
         const totals = result.stats.reduce((s, p) => ({texts: s.texts + p.texts, shapes: s.shapes + p.shapes, vectors: s.vectors + p.vectors}), {texts: 0, shapes: 0, vectors: 0});

@@ -8,7 +8,7 @@ export default function SponsorThanks({ data }: { data: ApiData }) {
   const preview = data.previewMode && data.user?.is_admin;
   return <div className="sponsor-thanks-page settings-stack">
     <header className="sponsor-thanks-intro">
-      <div className="sponsor-thanks-title"><div><span className="sponsor-thanks-eyebrow">每一份支持，都在推动创作</span><h1>赞助感谢</h1><p>感谢每一位支持 LandPPT 持续迭代与维护的人。</p></div><span className="sponsor-thanks-emblem" aria-hidden><HeartOutlined /></span></div>
+      <div className="sponsor-thanks-title"><div><span className="sponsor-thanks-eyebrow">每一份支持，都在推动创作</span><h1>赞助感谢</h1><p>感谢每一位支持 立铠 PPT 持续迭代与维护的人。</p></div><span className="sponsor-thanks-emblem" aria-hidden><HeartOutlined /></span></div>
       <div className="sponsor-thanks-summary"><span><strong>{sponsors.length}</strong> 位支持者</span><span>让好想法，走得更远。</span></div>
     </header>
     {preview && <Alert type="warning" showIcon title="管理员预览：当前赞助感谢页尚未公开。" description="在运营设置中开启并保存“公开赞助感谢页”，访客即可从页脚进入。" action={<Button href="/admin/community#sponsors">前往设置</Button>} />}

@@ -135,7 +135,7 @@ class EnhancedReportGenerator:
         # Minimal footer
         content.append("---")
         content.append("")
-        content.append(f"*本报告由 LandPPT 增强研究系统生成 - {datetime.now().strftime('%Y年%m月%d日')}*")
+        content.append(f"*本报告由 立铠 PPT 增强研究系统生成 - {datetime.now().strftime('%Y年%m月%d日')}*")
         
         return "\n".join(content)
 

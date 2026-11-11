@@ -1,5 +1,5 @@
 """
-Configuration management API for LandPPT
+Configuration management API for 立铠 PPT
 Supports per-user isolated configuration and system-level defaults
 """
 
@@ -480,7 +480,7 @@ async def get_landppt_models(
     user: User = Depends(get_current_user_required)
 ):
     """
-    Fetch available models for LandPPT using system-level config.
+    Fetch available models for 立铠 PPT using system-level config.
     The API key is used on the backend and never exposed to the frontend.
     """
     import aiohttp
@@ -495,7 +495,7 @@ async def get_landppt_models(
         if not api_key:
             return {
                 "success": False,
-                "error": "管理员尚未配置 LandPPT API Key"
+                "error": "管理员尚未配置 立铠 PPT API Key"
             }
         
         if not base_url:
@@ -529,14 +529,14 @@ async def get_landppt_models(
                     }
                 else:
                     error_text = await response.text()
-                    logger.error(f"Failed to fetch LandPPT models: {response.status} - {error_text}")
+                    logger.error(f"Failed to fetch 立铠 PPT models: {response.status} - {error_text}")
                     return {
                         "success": False,
                         "error": f"获取模型列表失败: HTTP {response.status}"
                     }
                     
     except Exception as e:
-        logger.error(f"Failed to get LandPPT models: {e}")
+        logger.error(f"Failed to get 立铠 PPT models: {e}")
         return {
             "success": False,
             "error": f"获取模型列表失败: {str(e)}"
@@ -548,7 +548,7 @@ async def test_landppt_provider(
     user: User = Depends(get_current_user_required)
 ):
     """
-    Test LandPPT provider using system-level config.
+    Test 立铠 PPT provider using system-level config.
     The API key is used on the backend and never exposed to the frontend.
     """
     import aiohttp
@@ -564,7 +564,7 @@ async def test_landppt_provider(
         if not api_key:
             return {
                 "success": False,
-                "error": "管理员尚未配置 LandPPT API Key"
+                "error": "管理员尚未配置 立铠 PPT API Key"
             }
         
         if not base_url:
@@ -598,20 +598,20 @@ async def test_landppt_provider(
                     data = await response.json()
                     return {
                         "success": True,
-                        "message": "LandPPT 提供者测试成功",
+                        "message": "立铠 PPT 提供者测试成功",
                         "model": model,
                         "response_preview": data.get("choices", [{}])[0].get("message", {}).get("content", "")[:50]
                     }
                 else:
                     error_text = await response.text()
-                    logger.error(f"LandPPT test failed: {response.status} - {error_text}")
+                    logger.error(f"立铠 PPT test failed: {response.status} - {error_text}")
                     return {
                         "success": False,
                         "error": f"测试失败: HTTP {response.status}"
                     }
                     
     except Exception as e:
-        logger.error(f"Failed to test LandPPT provider: {e}")
+        logger.error(f"Failed to test 立铠 PPT provider: {e}")
         return {
             "success": False,
             "error": f"测试失败: {str(e)}"
