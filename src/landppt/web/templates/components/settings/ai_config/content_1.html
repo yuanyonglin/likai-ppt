@@ -30,6 +30,9 @@
             <button class="tab-btn" onclick="switchTab('generation-params')" data-tab="generation-params">
                 生成参数
             </button>
+            <button class="tab-btn" onclick="switchTab('voice-models')" data-tab="voice-models">
+                语音模型
+            </button>
             <button class="tab-btn" onclick="switchTab('jev-config')" data-tab="jev-config">
                 决策模型配置
             </button>
@@ -810,6 +813,172 @@
                     </div>
                 </section>
 
+
+                {% if user and user.is_admin %}
+                <!-- PPTX 标准导出（Apryse） -->
+                <section class="config-section">
+                    <header class="config-section-header">
+                        <h4 class="config-section-title">
+                            <span class="config-section-icon"><i class="fas fa-file-powerpoint"></i></span>
+                            <span>
+                                Apryse 标准 PPTX 导出
+                                <small>用于生成符合标准的 .pptx 文件</small>
+                            </span>
+                        </h4>
+                        <span class="config-section-meta">导出 · 管理员</span>
+                    </header>
+                    <div class="config-section-body">
+                        <label class="toggle-row">
+                            <div class="toggle-switch">
+                                <input type="checkbox" name="enable_apryse_pptx_export"
+                                    id="enable_apryse_pptx_export" {% if current_config.get('enable_apryse_pptx_export') %}checked{% endif %}>
+                                <span class="toggle-slider"></span>
+                            </div>
+                            <div class="toggle-row-body">
+                                <div class="toggle-row-title">启用标准 PPTX 导出</div>
+                                <p class="toggle-row-desc">使用 Apryse SDK 生成完全兼容 PowerPoint 的 pptx 文件</p>
+                            </div>
+                        </label>
+
+                        <div class="field-grid" style="margin-top: 18px;">
+                            <div class="form-group full-row">
+                                <label class="field-label">
+                                    Apryse License Key
+                                    <span class="field-label-tag field-label-tag--required">必填</span>
+                                </label>
+                                <input type="password" name="apryse_license_key" placeholder="your-apryse-license-key"
+                                    value="{{ current_config.get('apryse_license_key', '') }}"
+                                    style="font-family: ui-monospace, monospace; font-size: 0.9em;">
+                                <span class="field-help">
+                                    用于 PPTX 导出功能的 Apryse SDK 许可证密钥，可在
+                                    <a href="https://docs.apryse.com/core/guides/get-started/trial-key" target="_blank">Apryse 官网</a> 获取
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+                {% endif %}
+
+                {% if user and user.is_admin %}
+                <section class="config-section">
+                    <header class="config-section-header">
+                        <h4 class="config-section-title">
+                            <span class="config-section-icon"><i class="fas fa-robot"></i></span>
+                            <span>
+                                无人值守
+                                <small>提交后自动跑完整条流水线，完成时通知你</small>
+                            </span>
+                        </h4>
+                        <span class="config-section-meta">生成策略</span>
+                    </header>
+                    <div class="config-section-body">
+                        <div class="field-grid">
+                            <div class="form-group">
+                                <label class="field-label">
+                                    默认停止阶段
+                                    <span class="field-label-tag">流水线</span>
+                                </label>
+                                <select name="unattended_default_stop_stage">
+                                    <option value="outline" {% if current_config.get('unattended_default_stop_stage') == 'outline' %}selected{% endif %}>生成大纲后停止</option>
+                                    <option value="template" {% if current_config.get('unattended_default_stop_stage') == 'template' %}selected{% endif %}>选择模板后停止</option>
+                                    <option value="ppt" {% if current_config.get('unattended_default_stop_stage', 'ppt') == 'ppt' %}selected{% endif %}>生成 PPT 后停止</option>
+                                    <option value="speech_script" {% if current_config.get('unattended_default_stop_stage') == 'speech_script' %}selected{% endif %}>生成演讲稿后停止</option>
+                                    <option value="narration_audio" {% if current_config.get('unattended_default_stop_stage') == 'narration_audio' %}selected{% endif %}>生成配音后停止</option>
+                                    <option value="video" {% if current_config.get('unattended_default_stop_stage') == 'video' %}selected{% endif %}>导出讲解视频后停止</option>
+                                </select>
+                                <span class="field-help">创建页面开启无人值守时的默认目标阶段，可在创建时逐次覆盖</span>
+                            </div>
+                            <div class="form-group">
+                                <label class="field-label">
+                                    配音引擎
+                                    <span class="field-label-tag">TTS</span>
+                                </label>
+                                <select name="unattended_tts_provider">
+                                    <option value="edge_tts" {% if current_config.get('unattended_tts_provider', 'edge_tts') == 'edge_tts' %}selected{% endif %}>Edge TTS（免费，无需配置）</option>
+                                    <option value="xiaomimimo" {% if current_config.get('unattended_tts_provider') == 'xiaomimimo' %}selected{% endif %}>小米 MiMo</option>
+                                    <option value="custom_tts_api" {% if current_config.get('unattended_tts_provider') == 'custom_tts_api' %}selected{% endif %}>自定义 TTS API</option>
+                                    <option value="cloud_tts" {% if current_config.get('unattended_tts_provider') == 'cloud_tts' %}selected{% endif %}>云端语音（MiniMax / OpenAI 格式）</option>
+                                </select>
+                                <span class="field-help">不含 ComfyUI：它必须提供参考音频，无人值守流程无法提供，会在第一页就失败</span>
+                            </div>
+                            <div class="form-group">
+                                <label class="field-label">
+                                    视频渲染方式
+                                    <span class="field-label-tag">视频</span>
+                                </label>
+                                <select name="unattended_video_render_mode">
+                                    <option value="live" {% if current_config.get('unattended_video_render_mode', 'live') == 'live' %}selected{% endif %}>实时录制（保留动画，较慢）</option>
+                                    <option value="static" {% if current_config.get('unattended_video_render_mode') == 'static' %}selected{% endif %}>静态截图（快速，无动画）</option>
+                                </select>
+                                <span class="field-help">实时录制失败时会自动降级为静态截图</span>
+                            </div>
+                            <div class="form-group">
+                                <label class="field-label">
+                                    视频帧率
+                                    <span class="field-label-tag">FPS</span>
+                                </label>
+                                <input type="number" name="unattended_video_fps" min="30" max="60" step="30"
+                                    value="{{ current_config.get('unattended_video_fps', '30') }}">
+                                <span class="field-help">仅支持 30 或 60；实时录制模式下 60 会自动降为 30</span>
+                            </div>
+                        </div>
+
+                        <label class="toggle-row">
+                            <div class="toggle-switch">
+                                <input type="checkbox" name="unattended_notify_in_app"
+                                    {% if current_config.get('unattended_notify_in_app', true) %}checked{% endif %}>
+                                <span class="toggle-slider"></span>
+                            </div>
+                            <div class="toggle-row-body">
+                                <div class="toggle-row-title">系统通知</div>
+                                <p class="toggle-row-desc">任务结束后在导航栏铃铛中推送站内通知</p>
+                            </div>
+                        </label>
+
+                        <label class="toggle-row">
+                            <div class="toggle-switch">
+                                <input type="checkbox" name="unattended_notify_email"
+                                    {% if current_config.get('unattended_notify_email') %}checked{% endif %}>
+                                <span class="toggle-slider"></span>
+                            </div>
+                            <div class="toggle-row-body">
+                                <div class="toggle-row-title">邮件通知</div>
+                                <p class="toggle-row-desc">任务结束后发送邮件到账号绑定的邮箱，需先配置邮件服务且账号已绑定邮箱</p>
+                            </div>
+                        </label>
+
+                        <div class="info-card info-card--warning" style="margin-top: 16px;">
+                            <span class="info-card-icon"><i class="fas fa-exclamation-triangle"></i></span>
+                            <p class="info-card-body">
+                                <strong>注意事项：</strong><br>
+                                • 演讲稿、配音、视频阶段依赖 PPT 已完整生成，任一阶段失败流水线会停止并通知<br>
+                                • 导出讲解视频需要服务器安装 ffmpeg / ffprobe 与 Playwright 浏览器<br>
+                                • 无人值守会跳过人工确认环节，模板将使用你的默认母版模板
+                            </p>
+                        </div>
+                    </div>
+                </section>
+                {% endif %}
+            </div>
+
+        </div>
+    </div>
+
+
+
+    <!-- 语音模型标签页 -->
+    <div id="voice-models" class="tab-content" style="display: none;">
+        <div class="card">
+            <h3 class="section-heading" style="margin-bottom: 24px; text-align: center;">语音模型配置</h3>
+
+            <div class="save-bar">
+                <div class="save-bar-text">
+                    <h5 class="save-bar-title">语音模型配置</h5>
+                    <p class="save-bar-hint">点击保存后，下一次生成讲解音频将立即应用新配置</p>
+                </div>
+            </div>
+
+            <div class="config-sections">
                 <!-- TTS 语音合成 -->
                 <section class="config-section">
                     <header class="config-section-header">
@@ -1049,158 +1218,9 @@
                         </div>
                     </div>
                 </section>
-
-                {% if user and user.is_admin %}
-                <!-- PPTX 标准导出（Apryse） -->
-                <section class="config-section">
-                    <header class="config-section-header">
-                        <h4 class="config-section-title">
-                            <span class="config-section-icon"><i class="fas fa-file-powerpoint"></i></span>
-                            <span>
-                                Apryse 标准 PPTX 导出
-                                <small>用于生成符合标准的 .pptx 文件</small>
-                            </span>
-                        </h4>
-                        <span class="config-section-meta">导出 · 管理员</span>
-                    </header>
-                    <div class="config-section-body">
-                        <label class="toggle-row">
-                            <div class="toggle-switch">
-                                <input type="checkbox" name="enable_apryse_pptx_export"
-                                    id="enable_apryse_pptx_export" {% if current_config.get('enable_apryse_pptx_export') %}checked{% endif %}>
-                                <span class="toggle-slider"></span>
-                            </div>
-                            <div class="toggle-row-body">
-                                <div class="toggle-row-title">启用标准 PPTX 导出</div>
-                                <p class="toggle-row-desc">使用 Apryse SDK 生成完全兼容 PowerPoint 的 pptx 文件</p>
-                            </div>
-                        </label>
-
-                        <div class="field-grid" style="margin-top: 18px;">
-                            <div class="form-group full-row">
-                                <label class="field-label">
-                                    Apryse License Key
-                                    <span class="field-label-tag field-label-tag--required">必填</span>
-                                </label>
-                                <input type="password" name="apryse_license_key" placeholder="your-apryse-license-key"
-                                    value="{{ current_config.get('apryse_license_key', '') }}"
-                                    style="font-family: ui-monospace, monospace; font-size: 0.9em;">
-                                <span class="field-help">
-                                    用于 PPTX 导出功能的 Apryse SDK 许可证密钥，可在
-                                    <a href="https://docs.apryse.com/core/guides/get-started/trial-key" target="_blank">Apryse 官网</a> 获取
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-                {% endif %}
-
-                {% if user and user.is_admin %}
-                <section class="config-section">
-                    <header class="config-section-header">
-                        <h4 class="config-section-title">
-                            <span class="config-section-icon"><i class="fas fa-robot"></i></span>
-                            <span>
-                                无人值守
-                                <small>提交后自动跑完整条流水线，完成时通知你</small>
-                            </span>
-                        </h4>
-                        <span class="config-section-meta">生成策略</span>
-                    </header>
-                    <div class="config-section-body">
-                        <div class="field-grid">
-                            <div class="form-group">
-                                <label class="field-label">
-                                    默认停止阶段
-                                    <span class="field-label-tag">流水线</span>
-                                </label>
-                                <select name="unattended_default_stop_stage">
-                                    <option value="outline" {% if current_config.get('unattended_default_stop_stage') == 'outline' %}selected{% endif %}>生成大纲后停止</option>
-                                    <option value="template" {% if current_config.get('unattended_default_stop_stage') == 'template' %}selected{% endif %}>选择模板后停止</option>
-                                    <option value="ppt" {% if current_config.get('unattended_default_stop_stage', 'ppt') == 'ppt' %}selected{% endif %}>生成 PPT 后停止</option>
-                                    <option value="speech_script" {% if current_config.get('unattended_default_stop_stage') == 'speech_script' %}selected{% endif %}>生成演讲稿后停止</option>
-                                    <option value="narration_audio" {% if current_config.get('unattended_default_stop_stage') == 'narration_audio' %}selected{% endif %}>生成配音后停止</option>
-                                    <option value="video" {% if current_config.get('unattended_default_stop_stage') == 'video' %}selected{% endif %}>导出讲解视频后停止</option>
-                                </select>
-                                <span class="field-help">创建页面开启无人值守时的默认目标阶段，可在创建时逐次覆盖</span>
-                            </div>
-                            <div class="form-group">
-                                <label class="field-label">
-                                    配音引擎
-                                    <span class="field-label-tag">TTS</span>
-                                </label>
-                                <select name="unattended_tts_provider">
-                                    <option value="edge_tts" {% if current_config.get('unattended_tts_provider', 'edge_tts') == 'edge_tts' %}selected{% endif %}>Edge TTS（免费，无需配置）</option>
-                                    <option value="xiaomimimo" {% if current_config.get('unattended_tts_provider') == 'xiaomimimo' %}selected{% endif %}>小米 MiMo</option>
-                                    <option value="custom_tts_api" {% if current_config.get('unattended_tts_provider') == 'custom_tts_api' %}selected{% endif %}>自定义 TTS API</option>
-                                    <option value="cloud_tts" {% if current_config.get('unattended_tts_provider') == 'cloud_tts' %}selected{% endif %}>云端语音（MiniMax / OpenAI 格式）</option>
-                                </select>
-                                <span class="field-help">不含 ComfyUI：它必须提供参考音频，无人值守流程无法提供，会在第一页就失败</span>
-                            </div>
-                            <div class="form-group">
-                                <label class="field-label">
-                                    视频渲染方式
-                                    <span class="field-label-tag">视频</span>
-                                </label>
-                                <select name="unattended_video_render_mode">
-                                    <option value="live" {% if current_config.get('unattended_video_render_mode', 'live') == 'live' %}selected{% endif %}>实时录制（保留动画，较慢）</option>
-                                    <option value="static" {% if current_config.get('unattended_video_render_mode') == 'static' %}selected{% endif %}>静态截图（快速，无动画）</option>
-                                </select>
-                                <span class="field-help">实时录制失败时会自动降级为静态截图</span>
-                            </div>
-                            <div class="form-group">
-                                <label class="field-label">
-                                    视频帧率
-                                    <span class="field-label-tag">FPS</span>
-                                </label>
-                                <input type="number" name="unattended_video_fps" min="30" max="60" step="30"
-                                    value="{{ current_config.get('unattended_video_fps', '30') }}">
-                                <span class="field-help">仅支持 30 或 60；实时录制模式下 60 会自动降为 30</span>
-                            </div>
-                        </div>
-
-                        <label class="toggle-row">
-                            <div class="toggle-switch">
-                                <input type="checkbox" name="unattended_notify_in_app"
-                                    {% if current_config.get('unattended_notify_in_app', true) %}checked{% endif %}>
-                                <span class="toggle-slider"></span>
-                            </div>
-                            <div class="toggle-row-body">
-                                <div class="toggle-row-title">系统通知</div>
-                                <p class="toggle-row-desc">任务结束后在导航栏铃铛中推送站内通知</p>
-                            </div>
-                        </label>
-
-                        <label class="toggle-row">
-                            <div class="toggle-switch">
-                                <input type="checkbox" name="unattended_notify_email"
-                                    {% if current_config.get('unattended_notify_email') %}checked{% endif %}>
-                                <span class="toggle-slider"></span>
-                            </div>
-                            <div class="toggle-row-body">
-                                <div class="toggle-row-title">邮件通知</div>
-                                <p class="toggle-row-desc">任务结束后发送邮件到账号绑定的邮箱，需先配置邮件服务且账号已绑定邮箱</p>
-                            </div>
-                        </label>
-
-                        <div class="info-card info-card--warning" style="margin-top: 16px;">
-                            <span class="info-card-icon"><i class="fas fa-exclamation-triangle"></i></span>
-                            <p class="info-card-body">
-                                <strong>注意事项：</strong><br>
-                                • 演讲稿、配音、视频阶段依赖 PPT 已完整生成，任一阶段失败流水线会停止并通知<br>
-                                • 导出讲解视频需要服务器安装 ffmpeg / ffprobe 与 Playwright 浏览器<br>
-                                • 无人值守会跳过人工确认环节，模板将使用你的默认母版模板
-                            </p>
-                        </div>
-                    </div>
-                </section>
-                {% endif %}
             </div>
-
         </div>
     </div>
-
-
 
     <!-- 应用配置标签页 (仅管理员可见) -->
     {% if user and user.is_admin %}

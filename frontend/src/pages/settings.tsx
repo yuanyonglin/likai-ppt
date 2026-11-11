@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, App, AutoComplete, Button, Card, Collapse, Form, Input, InputNumber, Modal, Radio, Select, Slider, Space, Switch, Tabs, Tag, Tooltip } from 'antd';
-import { ReloadOutlined, SaveOutlined, ApiOutlined, SettingOutlined, SlidersOutlined, BranchesOutlined, PictureOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { ReloadOutlined, SaveOutlined, ApiOutlined, SettingOutlined, SlidersOutlined, BranchesOutlined, PictureOutlined, CheckCircleOutlined, SoundOutlined } from '@ant-design/icons';
 import { request, type ApiData } from '../api';
 import { readSettingsSchema, type Field } from '../settings-schema';
 import JevSettings from './jev-settings';
@@ -8,12 +8,12 @@ import { modalFocus } from '../components/modal-focus';
 import { ModelPicker } from '../components/model-picker';
 import ManagedProviders, { useManagedProviders } from '../components/managed-providers';
 
-const categories: Record<string, string> = { 'generation-params': 'generation_params', 'app-config': 'app_config', 'image-service': 'image_service' };
-const saveLabels: Record<string, string> = { 'generation-params': '保存生成参数', 'app-config': '保存应用配置', 'image-service': '保存配置' };
+const categories: Record<string, string> = { 'generation-params': 'generation_params', 'voice-models': 'generation_params', 'app-config': 'app_config', 'image-service': 'image_service' };
+const saveLabels: Record<string, string> = { 'generation-params': '保存生成参数', 'voice-models': '保存语音配置', 'app-config': '保存应用配置', 'image-service': '保存配置' };
 const bool = (value: unknown) => value === true || value === 1 || value === 'true' || value === '1';
 const labels: Record<string, string> = { landppt: 'LandPPT', openai: 'OpenAI', anthropic: 'Anthropic Claude', google: 'Google Gemini' };
 const JevPanel = memo(JevSettings);
-const tabIcons: Record<string, React.ReactNode> = { 'ai-providers': <ApiOutlined aria-hidden />, 'generation-params': <SlidersOutlined aria-hidden />, 'jev-config': <BranchesOutlined aria-hidden />, 'app-config': <SettingOutlined aria-hidden />, 'image-service': <PictureOutlined aria-hidden /> };
+const tabIcons: Record<string, React.ReactNode> = { 'ai-providers': <ApiOutlined aria-hidden />, 'generation-params': <SlidersOutlined aria-hidden />, 'voice-models': <SoundOutlined aria-hidden />, 'jev-config': <BranchesOutlined aria-hidden />, 'app-config': <SettingOutlined aria-hidden />, 'image-service': <PictureOutlined aria-hidden /> };
 const providerMarks: Record<string, string> = { landppt: 'LP', openai: 'O', anthropic: 'A', google: 'G' };
 type Drafts = { read: (name: string) => unknown; subscribe: (listener: () => void) => () => void };
 
