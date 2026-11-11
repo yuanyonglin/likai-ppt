@@ -9,7 +9,7 @@
     let pendingSlideIndex = null, cacheEpoch = 0;
     function getState() {
         return { index: currentSlideIndex, slides: slidesData, total: totalSlides,
-            autoPlaying: isAutoPlaying, fullscreen: isFullscreenMode,
+            autoPlaying: isAutoPlaying || narrationEnabled, fullscreen: isFullscreenMode,
             narration: narrationEnabled, language: narrationLanguage, subtitle,
             panel, uiHidden, loading, transitioning: isTransitioning, cache: getCacheStats() };
     }
@@ -934,11 +934,14 @@
         }
     }
 
-    // 切换自动播放
+    // 切换自动播放：有讲解时边讲边翻页（讲完一页自动下一页），否则定时翻页
     function toggleAutoPlay() {
         if (isAutoPlaying) {
             clearInterval(autoPlayInterval);
             isAutoPlaying = false;
+        } else if (narrationAvailable) {
+            toggleNarration();
+            return;
         } else if (totalSlides > 1 && currentSlideIndex < totalSlides - 1) {
             stopNarration();
             isAutoPlaying = true;

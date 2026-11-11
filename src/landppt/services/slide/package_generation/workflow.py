@@ -636,6 +636,10 @@ class PackageWorkflow:
                     "completed_at": time.time(),
                 },
             )
+            if not failures:
+                from ...auto_narration import schedule_auto_narration
+
+                await schedule_auto_narration(project_id, self.service.user_id)
             yield event(
                 "complete",
                 total=total,

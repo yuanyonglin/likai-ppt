@@ -452,17 +452,19 @@ def test_public_data_contains_no_account_fields_and_escapes_titles(ui_page):
     assert page.locator(".presentation-topbar img").count() == 0
 
 
-def test_narration_autostart_and_autoplay_are_mutually_exclusive(ui_page):
+def test_autoplay_drives_narration_when_speech_exists(ui_page):
     page, load = ui_page
     setup(page, load, speech=True, query="?narration=1&language=en")
     expect(page.get_by_role("button", name="停止讲解", exact=True)).to_be_visible()
     expect(page.get_by_role("status", name="讲解字幕")).to_be_visible()
-    page.get_by_role("button", name="自动播放", exact=True).click()
+    # While narrating, the play control reports playing and pauses the narration.
+    page.get_by_role("button", name="暂停自动播放", exact=True).click()
     assert not page.evaluate("LandPPTPresentation.getState().narration")
     assert page.evaluate("testAudio[0].paused")
-    expect(page.get_by_role("button", name="暂停自动播放", exact=True)).to_be_visible()
-    page.get_by_role("button", name="讲解", exact=True).click()
-    assert not page.evaluate("LandPPTPresentation.getState().autoPlaying")
+    # Play starts narration (which advances slides itself), not the timed interval.
+    page.get_by_role("button", name="自动播放", exact=True).click()
+    assert page.evaluate("LandPPTPresentation.getState().narration")
+    assert not page.evaluate("testIntervals.some(x => x.ms === 5000)")
     expect(page.get_by_role("button", name="停止讲解", exact=True)).to_be_visible()
 
 

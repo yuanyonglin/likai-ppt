@@ -310,12 +310,14 @@ async def get_narration_audio(
         try:
             row = await repo.get_latest_for_slide(project_id=project_id, slide_index=slide_index, language=language)
             if (not row or not row.file_path or not os.path.exists(row.file_path)) and autogen:
+                from ...services.auto_narration import resolve_auto_narration_provider
                 from ...services.narration_service import NarrationService
 
                 service = NarrationService(user_id=user.id)
                 await service.generate_project_slide_audios(
                     project_id=project_id,
                     slide_indices=[int(slide_index)],
+                    provider=(await resolve_auto_narration_provider(user.id)) or "auto",
                     language=language,
                     uploads_dir="uploads",
                 )
@@ -369,10 +371,13 @@ async def get_narration_cues(
             if (not row or not row.file_path or not os.path.exists(row.file_path)) and autogen:
                 from ...services.narration_service import NarrationService
 
+                from ...services.auto_narration import resolve_auto_narration_provider
+
                 service = NarrationService(user_id=user.id)
                 await service.generate_project_slide_audios(
                     project_id=project_id,
                     slide_indices=[int(slide_index)],
+                    provider=(await resolve_auto_narration_provider(user.id)) or "auto",
                     language=language,
                     uploads_dir="uploads",
                 )

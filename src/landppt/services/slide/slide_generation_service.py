@@ -754,6 +754,12 @@ class SlideGenerationService:
                         )
                         logger.info(f"Successfully updated PPT creation stage to completed for project {project_id}")
 
+                        from ..auto_narration import schedule_auto_narration
+
+                        await schedule_auto_narration(
+                            project_id, self.user_id, getattr(project, "topic", "") or ""
+                        )
+
                 except Exception as save_error:
                     logger.error(f"Failed to update project status in database: {save_error}")
                     # Continue anyway, as the data is still in memory
