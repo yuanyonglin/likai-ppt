@@ -56,7 +56,7 @@ DEFAULT_STOP_AFTER = "ppt"
 # purpose: it raises unless given a reference audio file, and nothing in an
 # unattended run can supply one.
 DEFAULT_TTS_PROVIDER = "edge_tts"
-SUPPORTED_TTS_PROVIDERS = ("edge_tts", "xiaomimimo", "custom_tts_api")
+SUPPORTED_TTS_PROVIDERS = ("edge_tts", "xiaomimimo", "custom_tts_api", "cloud_tts")
 
 # How the template stage decides which template to use.
 #   auto   - the user's default global master template

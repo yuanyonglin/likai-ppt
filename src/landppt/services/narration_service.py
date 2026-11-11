@@ -37,6 +37,12 @@ DEFAULT_CUSTOM_TTS_API_URL = "http://localhost:9880/"
 DEFAULT_CUSTOM_TTS_API_SPEAKER = "TOM女"
 DEFAULT_CUSTOM_TTS_API_SPEED = "1"
 DEFAULT_CUSTOM_TTS_API_NOVASR = "1"
+DEFAULT_CLOUD_TTS_PROTOCOL = "minimax"
+DEFAULT_CLOUD_TTS_BASE_URL = "https://novaizi.com/minimax"
+DEFAULT_CLOUD_TTS_MODEL = "speech-2.8-hd"
+DEFAULT_CLOUD_TTS_VOICE = "male-qn-jingying"
+CLOUD_TTS_PROTOCOLS = ("minimax", "openai")
+CLOUD_TTS_MAX_CHARS = 1500  # per request; well below MiniMax (10000) and OpenAI (4096) limits
 
 
 @dataclass(frozen=True)
@@ -433,6 +439,23 @@ class NarrationService:
         except Exception:
             return {}
 
+    async def _get_cloud_tts_settings_from_config(self) -> Dict[str, Any]:
+        if self.user_id is None:
+            return {}
+        try:
+            from .db_config_service import get_db_config_service
+
+            config_service = get_db_config_service()
+            out: Dict[str, Any] = {}
+            for key in ("protocol", "api_key", "base_url", "model", "voice"):
+                value = await config_service.get_config_value(f"cloud_tts_{key}", user_id=self.user_id)
+                value_s = (str(value) if value is not None else "").strip()
+                if value_s:
+                    out[key] = value_s
+            return out
+        except Exception:
+            return {}
+
     async def _get_custom_tts_api_settings_from_config(self) -> Dict[str, Any]:
         if self.user_id is None:
             return {}
@@ -682,7 +705,7 @@ class NarrationService:
         progress_callback: Optional[Callable[[int, int], Awaitable[None]]] = None,
     ) -> List[NarrationAudioResult]:
         provider = (provider or "auto").strip().lower()
-        if provider not in {"auto", "edge_tts", "comfyuiapi", "xiaomimimo", "custom_tts_api"}:
+        if provider not in {"auto", "edge_tts", "comfyuiapi", "xiaomimimo", "custom_tts_api", "cloud_tts"}:
             raise RuntimeError(f"Unsupported TTS provider: {provider}")
 
         language = (language or "zh").strip().lower() or "zh"
@@ -779,6 +802,18 @@ class NarrationService:
                 voice_prompt=voice_prompt,
                 force_regenerate=force_regenerate,
                 uploads_dir=uploads_dir,
+            )
+
+        if provider == "cloud_tts":
+            return await self._generate_project_slide_audios_cloud_tts(
+                project_id=project_id,
+                slide_indices=slide_indices,
+                language=language,
+                voice=voice,
+                rate=rate,
+                force_regenerate=force_regenerate,
+                uploads_dir=uploads_dir,
+                progress_callback=progress_callback,
             )
 
         if provider == "custom_tts_api":
@@ -1197,6 +1232,267 @@ class NarrationService:
                         voice=voice_id,
                         rate=rate,
                         audio_format=audio_format,
+                        content_hash=content_hash,
+                        file_path=out_path,
+                        duration_ms=duration_ms,
+                        cues_json=cues_json,
+                    )
+                    outputs.append(
+                        NarrationAudioResult(
+                            slide_index=script.slide_index,
+                            language=language,
+                            voice=voice_id,
+                            rate=rate,
+                            audio_path=out_path,
+                            duration_ms=duration_ms,
+                            cached=False,
+                        )
+                    )
+                    await mark_done()
+
+            return outputs
+        finally:
+            audio_repo.close()
+
+    @staticmethod
+    def _cloud_tts_speed_from_rate(rate: str) -> float:
+        """Convert an Edge-style rate such as "+10%" / "-20%" into a speed multiplier."""
+        m = re.fullmatch(r"\s*([+-]?\d+(?:\.\d+)?)\s*%\s*", rate or "")
+        if not m:
+            return 1.0
+        return round(max(0.5, min(2.0, 1.0 + float(m.group(1)) / 100.0)), 2)
+
+    @staticmethod
+    def _cloud_tts_build_request(
+        *, protocol: str, base_url: str, api_key: str, model: str, voice: str, speed: float, text: str
+    ) -> Tuple[str, Dict[str, str], Dict[str, Any]]:
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        if protocol == "openai":
+            root = base_url[:-3] if base_url.endswith("/v1") else base_url
+            url = f"{root}/v1/audio/speech"
+            payload: Dict[str, Any] = {
+                "model": model,
+                "input": text,
+                "voice": voice,
+                "response_format": "mp3",
+                "speed": speed,
+            }
+        else:
+            url = f"{base_url}/v1/t2a_v2"
+            payload = {
+                "model": model,
+                "text": text,
+                "stream": False,
+                "voice_setting": {"voice_id": voice, "speed": speed},
+                "audio_setting": {"format": "mp3", "sample_rate": 32000, "bitrate": 128000, "channel": 1},
+            }
+        return url, headers, payload
+
+    @staticmethod
+    def _cloud_tts_parse_response(*, protocol: str, status: int, body: bytes, content_type: str) -> bytes:
+        """Return audio bytes or raise RuntimeError with the upstream message."""
+        label = f"cloud_tts({protocol})"
+        if status >= 400:
+            raise RuntimeError(f"{label} failed: HTTP {status} {body[:500].decode('utf-8', errors='ignore')}")
+        if protocol == "openai":
+            if "json" in (content_type or "").lower() or body[:1] in (b"{", b"["):
+                raise RuntimeError(f"{label} returned JSON instead of audio: {body[:500].decode('utf-8', errors='ignore')}")
+            if not body:
+                raise RuntimeError(f"{label} returned empty audio bytes")
+            return body
+        try:
+            data = json.loads(body.decode("utf-8"))
+        except Exception as exc:
+            raise RuntimeError(f"{label} returned invalid JSON: {body[:300].decode('utf-8', errors='ignore')}") from exc
+        base_resp = data.get("base_resp") or {}
+        if int(base_resp.get("status_code", 0) or 0) != 0:
+            raise RuntimeError(
+                f"{label} error {base_resp.get('status_code')}: {base_resp.get('status_msg') or data}"
+            )
+        audio_hex = ((data.get("data") or {}).get("audio") or "").strip()
+        if not audio_hex:
+            raise RuntimeError(f"{label} returned empty audio data")
+        try:
+            audio = bytes.fromhex(audio_hex)
+        except ValueError as exc:
+            raise RuntimeError(f"{label} returned audio that is not valid hex") from exc
+        if not audio:
+            raise RuntimeError(f"{label} returned empty audio bytes")
+        return audio
+
+    async def _generate_project_slide_audios_cloud_tts(
+        self,
+        *,
+        project_id: str,
+        slide_indices: Optional[List[int]],
+        language: str,
+        voice: Optional[str],
+        rate: str,
+        force_regenerate: bool,
+        uploads_dir: str,
+        progress_callback: Optional[Callable[[int, int], Awaitable[None]]] = None,
+    ) -> List[NarrationAudioResult]:
+        provider = "cloud_tts"
+        cfg = await self._get_cloud_tts_settings_from_config()
+
+        def pick(key: str, default: str) -> str:
+            value = cfg.get(key) or getattr(app_config, f"cloud_tts_{key}", None) or default
+            return (str(value) if value is not None else "").strip() or default
+
+        api_key = (cfg.get("api_key") or getattr(app_config, "cloud_tts_api_key", None) or os.environ.get("CLOUD_TTS_API_KEY") or "").strip()
+        if not api_key:
+            raise RuntimeError("cloud_tts provider requires an API key (settings page: 云端语音 -> API Key, or CLOUD_TTS_API_KEY)")
+        protocol = pick("protocol", DEFAULT_CLOUD_TTS_PROTOCOL).lower()
+        if protocol not in CLOUD_TTS_PROTOCOLS:
+            raise RuntimeError(f"cloud_tts protocol must be one of {CLOUD_TTS_PROTOCOLS}, got '{protocol}'")
+        base_url = pick("base_url", DEFAULT_CLOUD_TTS_BASE_URL).rstrip("/")
+        model = pick("model", DEFAULT_CLOUD_TTS_MODEL)
+        voice_id = (str(voice) if voice is not None else "").strip() or pick("voice", DEFAULT_CLOUD_TTS_VOICE)
+        # The editor's default voice is an Edge-TTS name; it is meaningless for cloud vendors.
+        if re.fullmatch(r"[a-z]{2}-[A-Z]{2}-\w+Neural", voice_id):
+            voice_id = pick("voice", DEFAULT_CLOUD_TTS_VOICE)
+        rate = (rate or "+0%").strip()
+        speed = self._cloud_tts_speed_from_rate(rate)
+
+        logger.info(
+            "Narration TTS settings: provider=%s project_id=%s language=%s protocol=%s model=%s voice=%s speed=%s user_id=%s",
+            provider, project_id, language, protocol, model, voice_id, speed, self.user_id,
+        )
+
+        from .narration_audio_repository import NarrationAudioRepository
+
+        audio_repo = NarrationAudioRepository()
+        try:
+            scripts = await self._ensure_speech_scripts(
+                project_id=project_id,
+                language=language,
+                slide_indices=slide_indices,
+            )
+            if not scripts:
+                raise RuntimeError(
+                    f"No speech scripts found for language='{language}' and auto-generation produced none."
+                )
+
+            wanted = set(slide_indices) if slide_indices else None
+            outputs: List[NarrationAudioResult] = []
+            base_dir = os.path.join(uploads_dir, "narration", project_id, language)
+            _ensure_dir(base_dir)
+
+            import aiohttp
+
+            work_scripts = [script for script in scripts if wanted is None or script.slide_index in wanted]
+            total_count = len(work_scripts)
+            done_count = 0
+
+            async def mark_done() -> None:
+                nonlocal done_count
+                done_count += 1
+                if progress_callback is not None:
+                    await progress_callback(done_count, total_count)
+
+            timeout = aiohttp.ClientTimeout(total=300)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                for script in work_scripts:
+                    text = (script.script_content or "").strip()
+                    if not text:
+                        await mark_done()
+                        continue
+
+                    cache_text = f"protocol={protocol};base={base_url};model={model};speed={speed}|{text}"
+                    content_hash = _hash_for_tts(
+                        provider=provider, language=language, voice=voice_id, rate=rate, text=cache_text
+                    )
+                    filename = f"slide_{script.slide_index}_{content_hash[:12]}.mp3"
+                    out_path = os.path.join(base_dir, filename)
+
+                    cached_row = await audio_repo.get_cached_audio(
+                        project_id=project_id,
+                        slide_index=script.slide_index,
+                        language=language,
+                        provider=provider,
+                        voice=voice_id,
+                        rate=rate,
+                        content_hash=content_hash,
+                    )
+                    if (
+                        not force_regenerate
+                        and cached_row
+                        and cached_row.file_path
+                        and os.path.exists(cached_row.file_path)
+                        and os.path.getsize(cached_row.file_path) > 0
+                    ):
+                        outputs.append(
+                            NarrationAudioResult(
+                                slide_index=script.slide_index,
+                                language=language,
+                                voice=voice_id,
+                                rate=rate,
+                                audio_path=cached_row.file_path,
+                                duration_ms=cached_row.duration_ms,
+                                cached=True,
+                            )
+                        )
+                        await mark_done()
+                        continue
+
+                    audio_parts: List[bytes] = []
+                    for chunk in self._split_text_for_tts(text, max_chars=CLOUD_TTS_MAX_CHARS):
+                        url, headers, payload = self._cloud_tts_build_request(
+                            protocol=protocol, base_url=base_url, api_key=api_key,
+                            model=model, voice=voice_id, speed=speed, text=chunk,
+                        )
+                        last_error: Optional[Exception] = None
+                        for attempt in range(3):
+                            try:
+                                async with session.post(url, json=payload, headers=headers) as resp:
+                                    body = await resp.read()
+                                    status = resp.status
+                                    content_type = resp.headers.get("Content-Type", "")
+                                if status in (429, 500, 502, 503, 504) and attempt < 2:
+                                    await asyncio.sleep(2 * (attempt + 1))
+                                    continue
+                                audio_parts.append(
+                                    self._cloud_tts_parse_response(
+                                        protocol=protocol, status=status, body=body, content_type=content_type
+                                    )
+                                )
+                                last_error = None
+                                break
+                            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                                last_error = exc
+                                if attempt < 2:
+                                    await asyncio.sleep(2 * (attempt + 1))
+                        if last_error is not None:
+                            raise RuntimeError(f"cloud_tts request failed after 3 attempts: {last_error}") from last_error
+
+                    tmp_dir = tempfile.mkdtemp(prefix="landppt_tts_", dir=base_dir)
+                    try:
+                        tmp_path = os.path.join(tmp_dir, filename)
+                        with open(tmp_path, "wb") as f:
+                            for part in audio_parts:
+                                f.write(part)
+                        os.replace(tmp_path, out_path)
+                    finally:
+                        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+                    duration_ms = await ffprobe_duration_ms(out_path)
+                    cues_json = None
+                    try:
+                        if duration_ms is not None:
+                            cues_json = await build_cues_json_for_audio(
+                                text=text, audio_path=out_path, duration_ms=int(duration_ms)
+                            )
+                    except Exception:
+                        cues_json = None
+
+                    await audio_repo.upsert_audio(
+                        project_id=project_id,
+                        slide_index=script.slide_index,
+                        language=language,
+                        provider=provider,
+                        voice=voice_id,
+                        rate=rate,
+                        audio_format="mp3",
                         content_hash=content_hash,
                         file_path=out_path,
                         duration_ms=duration_ms,

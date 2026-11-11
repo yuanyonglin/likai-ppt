@@ -174,6 +174,7 @@
                                                         <option value="edge_tts" ${narrationTtsProvider === 'edge_tts' ? 'selected' : ''}>Edge-TTS</option>
                                                         <option value="xiaomimimo" ${narrationTtsProvider === 'xiaomimimo' ? 'selected' : ''}>Xiaomi Mimo TTS</option>
                                                         <option value="custom_tts_api" ${narrationTtsProvider === 'custom_tts_api' ? 'selected' : ''}>Custom TTS API</option>
+                                                        <option value="cloud_tts" ${narrationTtsProvider === 'cloud_tts' ? 'selected' : ''}>云端语音（MiniMax / OpenAI 格式）</option>
                                                         <option value="comfyuiapi" ${narrationTtsProvider === 'comfyuiapi' ? 'selected' : ''}>ComfyUI Qwen3-TD</option>
                                                     </select>
                                                 </div>

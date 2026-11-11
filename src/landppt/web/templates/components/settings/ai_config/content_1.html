@@ -963,6 +963,48 @@
                             </div>
                         </div>
 
+                        <!-- Cloud TTS -->
+                        <div class="sub-section">
+                            <h5 class="sub-section-title">云端语音 <small>MiniMax / OpenAI 格式，经聚合平台或官方</small></h5>
+                            <div class="field-grid">
+                                <div class="form-group">
+                                    <label class="field-label">协议</label>
+                                    <select name="cloud_tts_protocol">
+                                        <option value="minimax" {% if current_config.get('cloud_tts_protocol', 'minimax') == 'minimax' %}selected{% endif %}>MiniMax（/v1/t2a_v2）</option>
+                                        <option value="openai" {% if current_config.get('cloud_tts_protocol') == 'openai' %}selected{% endif %}>OpenAI 兼容（/v1/audio/speech）</option>
+                                    </select>
+                                    <span class="field-help">按所选模型的接口格式选择；格式不对会返回 404 或报错</span>
+                                </div>
+                                <div class="form-group">
+                                    <label class="field-label">API Key</label>
+                                    <input type="password" name="cloud_tts_api_key" placeholder="CLOUD_TTS_API_KEY"
+                                        value="{{ current_config.get('cloud_tts_api_key', '') }}"
+                                        style="font-family: ui-monospace, monospace; font-size: 0.9em;">
+                                    <span class="field-help">也可通过环境变量 <code>CLOUD_TTS_API_KEY</code> 配置</span>
+                                </div>
+                                <div class="form-group">
+                                    <label class="field-label">Base URL</label>
+                                    <input type="url" name="cloud_tts_base_url" placeholder="https://novaizi.com/minimax"
+                                        value="{{ current_config.get('cloud_tts_base_url', '') }}"
+                                        style="font-family: ui-monospace, monospace; font-size: 0.9em;">
+                                    <span class="field-help">MiniMax 协议填到 <code>/minimax</code> 为止；OpenAI 协议填到域名或 <code>/v1</code> 之前，例如 <code>https://novaizi.com</code></span>
+                                </div>
+                                <div class="form-group">
+                                    <label class="field-label">模型</label>
+                                    <input type="text" name="cloud_tts_model" placeholder="speech-2.8-hd"
+                                        value="{{ current_config.get('cloud_tts_model', '') }}"
+                                        style="font-family: ui-monospace, monospace; font-size: 0.9em;">
+                                </div>
+                                <div class="form-group">
+                                    <label class="field-label">默认音色</label>
+                                    <input type="text" name="cloud_tts_voice" placeholder="male-qn-jingying"
+                                        value="{{ current_config.get('cloud_tts_voice', '') }}"
+                                        style="font-family: ui-monospace, monospace; font-size: 0.9em;">
+                                    <span class="field-help">MiniMax 填 voice_id；OpenAI 格式填 alloy、nova 等；生成讲解时在“音色”框里填写可覆盖</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- ComfyUI TTS -->
                         <div class="sub-section">
                             <h5 class="sub-section-title">ComfyUI TTS <small>本地 / 可视化工作流</small></h5>
@@ -1091,6 +1133,7 @@
                                     <option value="edge_tts" {% if current_config.get('unattended_tts_provider', 'edge_tts') == 'edge_tts' %}selected{% endif %}>Edge TTS（免费，无需配置）</option>
                                     <option value="xiaomimimo" {% if current_config.get('unattended_tts_provider') == 'xiaomimimo' %}selected{% endif %}>小米 MiMo</option>
                                     <option value="custom_tts_api" {% if current_config.get('unattended_tts_provider') == 'custom_tts_api' %}selected{% endif %}>自定义 TTS API</option>
+                                    <option value="cloud_tts" {% if current_config.get('unattended_tts_provider') == 'cloud_tts' %}selected{% endif %}>云端语音（MiniMax / OpenAI 格式）</option>
                                 </select>
                                 <span class="field-help">不含 ComfyUI：它必须提供参考音频，无人值守流程无法提供，会在第一页就失败</span>
                             </div>
