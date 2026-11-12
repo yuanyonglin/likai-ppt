@@ -146,9 +146,14 @@ def _assert_audio(zip_file, page, source_index, duration):
     assert not xml.xpath(".//a:videoFile | .//p:video", namespaces=NS)
     assert xml.xpath("./p:transition/@advTm", namespaces=NS) == [str(duration + 1000)]
     assert xml.xpath("./p:transition/@advClick", namespaces=NS) == ["1"]
-    assert xml.xpath(".//p:audio/@isNarration", namespaces=NS) == ["1"]
     assert xml.xpath(".//p:audio/p:cMediaNode/@showWhenStopped", namespaces=NS) == ["0"]
-    assert xml.xpath(".//p:audio//p:cond/@delay", namespaces=NS) == ["0"]
+    spid = xml.xpath(".//p:audio//p:spTgt/@spid", namespaces=NS)[0]
+    main_seq = './/p:seq/p:cTn[@nodeType="mainSeq"]'
+    assert xml.xpath(f'{main_seq}//p:cond[@evt="onBegin"]/p:tn/@val', namespaces=NS) == ["2"]
+    play = xml.xpath(f'{main_seq}//p:cTn[@presetClass="mediacall"][@nodeType="afterEffect"]//p:cmd', namespaces=NS)[0]
+    assert play.get("cmd") == "playFrom(0.0)"
+    assert play.xpath(".//p:spTgt/@spid", namespaces=NS) == [spid]
+    assert play.xpath("./p:cBhvr/p:cTn/@dur", namespaces=NS) == [str(duration)]
     ids = xml.xpath(".//p:cTn/@id", namespaces=NS)
     assert len(ids) == len(set(ids))
     assert xml.index(xml.find("p:transition", NS)) < xml.index(xml.find("p:timing", NS))

@@ -10,7 +10,8 @@ from pathlib import Path
 
 from pptx import Presentation
 from pptx.opc.constants import RELATIONSHIP_TYPE as RT
-from pptx.oxml.ns import qn
+from pptx.oxml import parse_xml
+from pptx.oxml.ns import nsdecls, qn
 from pptx.oxml.xmlchemy import OxmlElement
 from pptx.util import Inches
 
@@ -26,6 +27,30 @@ from ...web.route_modules.support import ppt_service
 from ..registry import task_handler
 
 logger = logging.getLogger(__name__)
+
+
+_AUTOPLAY_AUDIO_TIMING = (
+    f'<p:timing {nsdecls("p")}><p:tnLst><p:par>'
+    '<p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot"><p:childTnLst>'
+    '<p:seq concurrent="1" nextAc="seek"><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>'
+    '<p:par><p:cTn id="3" fill="hold"><p:stCondLst><p:cond delay="indefinite"/>'
+    '<p:cond evt="onBegin" delay="0"><p:tn val="2"/></p:cond></p:stCondLst><p:childTnLst>'
+    '<p:par><p:cTn id="4" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>'
+    '<p:par><p:cTn id="5" presetID="1" presetClass="mediacall" presetSubtype="0" fill="hold" nodeType="afterEffect">'
+    '<p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>'
+    '<p:cmd type="call" cmd="playFrom(0.0)"><p:cBhvr><p:cTn id="6" dur="{dur}" fill="hold"/>'
+    '<p:tgtEl><p:spTgt spid="{spid}"/></p:tgtEl></p:cBhvr></p:cmd>'
+    '</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>'
+    '</p:childTnLst></p:cTn>'
+    '<p:prevCondLst><p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:prevCondLst>'
+    '<p:nextCondLst><p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:nextCondLst>'
+    '</p:seq>'
+    '<p:audio><p:cMediaNode vol="100000" showWhenStopped="0">'
+    '<p:cTn id="7" fill="hold" display="0"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst>'
+    '<p:endCondLst><p:cond evt="onStopAudio" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:endCondLst></p:cTn>'
+    '<p:tgtEl><p:spTgt spid="{spid}"/></p:tgtEl></p:cMediaNode></p:audio>'
+    '</p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>'
+)
 
 
 async def _embed_narration_audio(prs, project_id: str, language: str = "zh", *, slide_indices=None) -> list[int]:
@@ -66,19 +91,12 @@ async def _embed_narration_audio(prs, project_id: str, language: str = "zh", *, 
             audio_file.set(qn("r:link"), slide.part.relate_to(slide.part.related_part(video_rid), RT.AUDIO))
             slide.part.drop_rel(video_rid)
 
-            # ECMA-376 19.5.9/19.5.29/19.5.31: an audio child of tmRoot with
-            # delay=0 starts on slide entry; showWhenStopped=0 hides its poster.
-            audio_node = slide._element.xpath(
-                f'.//p:video[p:cMediaNode/p:tgtEl/p:spTgt[@spid="{icon.shape_id}"]]'
-            )[0]
-            audio_node.tag = qn("p:audio")
-            audio_node.set("isNarration", "1")
-            media_node = audio_node.find(qn("p:cMediaNode"))
-            media_node.set("vol", "100000")
-            media_node.set("showWhenStopped", "0")
-            media_node.set("numSld", "1")
-            media_node.find(qn("p:cTn")).set("dur", str(duration_ms))
-            media_node.find(f'./{qn("p:cTn")}/{qn("p:stCondLst")}/{qn("p:cond")}').set("delay", "0")
+            # add_movie's timing only plays on click. Replace it with the main
+            # sequence PowerPoint writes for audio set to "Start: Automatically".
+            slide._element.replace(
+                slide._element.find(qn("p:timing")),
+                parse_xml(_AUTOPLAY_AUDIO_TIMING.format(spid=icon.shape_id, dur=duration_ms)),
+            )
 
             transition = slide._element.find(qn("p:transition"))
             if transition is None:
