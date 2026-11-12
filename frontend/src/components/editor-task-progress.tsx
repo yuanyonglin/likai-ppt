@@ -8,6 +8,7 @@ export function editorTaskNotice(toast: ApiData) {
   const task = /上传/.test(initial) ? { title: '上传参考资料', icon: <CloudUploadOutlined /> }
     : /人话|改写/.test(initial) ? { title: '优化演讲稿', icon: <FileTextOutlined /> }
     : /演讲稿|script/i.test(initial) ? { title: '生成演讲稿', icon: <FileTextOutlined /> }
+    : /生成.*讲解视频/.test(initial) ? { title: '生成讲解视频', icon: <VideoCameraOutlined /> }
     : /视频/.test(initial) ? { title: '导出讲解视频', icon: <VideoCameraOutlined /> }
     : /音频/.test(initial) ? { title: /导出/.test(initial) ? '导出讲解音频' : '生成讲解音频', icon: <AudioOutlined /> }
     : /导出|PPTX|PDF/i.test(initial) ? { title: '导出演示文稿', icon: <DownloadOutlined /> }
