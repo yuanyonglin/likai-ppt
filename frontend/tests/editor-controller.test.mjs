@@ -113,6 +113,15 @@ test('outline metadata provides chapter types without exposing document bodies',
   assert.equal('content_points' in pages[0], false);
   assert.equal('html_content' in pages[0], false);
 });
+test('explainer video pages are identified by the html attribute and delete targets the current page', () => {
+  const context = nativeEngine(), engine = context.LandPPTEditorEngine;
+  vm.runInContext(`slidesData[1].html_content = '<div class="explainer-video-page" data-explainer-video-id="vid-1"><video></video></div>';
+    let contextMenuSlideIndex = -1, deleted = null; function deleteSlide(){ deleted = contextMenuSlideIndex; }`, context);
+  assert.equal(engine.read().currentVideoId, null); assert.equal(engine.read().currentSlideId, 'one');
+  engine.call('selectSlide', 1);
+  assert.equal(engine.read().currentVideoId, 'vid-1'); assert.equal(engine.read().currentSlideId, 'two');
+  engine.call('deleteSlide'); assert.equal(vm.runInContext('deleted', context), 1);
+});
 test('native shortcut and toolbar Save cannot duplicate writes', async () => {
   const context = nativeEngine(), engine = context.LandPPTEditorEngine, release = engine.subscribe(() => {});
   const first = engine.call('saveSlide'), second = context.saveSlide(); assert.equal(first, second);
