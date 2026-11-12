@@ -9,9 +9,13 @@ import tempfile
 from pathlib import Path
 
 from pptx import Presentation
+from pptx.opc.constants import RELATIONSHIP_TYPE as RT
+from pptx.oxml.ns import qn
+from pptx.oxml.xmlchemy import OxmlElement
 from pptx.util import Inches
 
 from ...services.background_tasks import TaskStatus, get_task_manager
+from ...services.narration_audio_repository import NarrationAudioRepository
 from ...services.pdf_to_pptx_converter import get_pdf_to_pptx_converter
 from ...services.pyppeteer_pdf_converter import get_pdf_converter
 from ...services.speech_script_repository import SpeechScriptRepository
@@ -22,6 +26,69 @@ from ...web.route_modules.support import ppt_service
 from ..registry import task_handler
 
 logger = logging.getLogger(__name__)
+
+
+async def _embed_narration_audio(prs, project_id: str, language: str = "zh", *, slide_indices=None) -> list[int]:
+    """Embed cached narration; indices are zero-based, returned page numbers one-based."""
+    project_root = Path(__file__).resolve().parents[4]
+    indices = range(len(prs.slides)) if slide_indices is None else slide_indices
+    skipped = []
+    repo = NarrationAudioRepository()
+    try:
+        for index, slide in zip(indices, prs.slides, strict=True):
+            audio = await repo.get_latest_for_slide(project_id=project_id, slide_index=index, language=language)
+            if audio is None or not (project_root / audio.file_path).is_file():
+                skipped.append(index + 1)
+                continue
+
+            audio_path = project_root / audio.file_path
+            duration_ms = audio.duration_ms
+            if duration_ms is None:
+                from ...services.narration_service import ffprobe_duration_ms
+
+                duration_ms = await ffprobe_duration_ms(str(audio_path))
+                if duration_ms is None:
+                    raise ValueError(f"Cannot determine narration duration for slide {index + 1}")
+
+            icon = slide.shapes.add_movie(
+                str(audio_path),
+                prs.slide_width - Inches(0.5),
+                prs.slide_height - Inches(0.5),
+                Inches(0.35),
+                Inches(0.35),
+                mime_type="audio/mpeg",
+            )
+            # add_movie supplies the speaker poster and p14:media embedding. Replace
+            # its legacy video reference with the audio relationship used by PowerPoint.
+            audio_file = icon._element.xpath("./p:nvPicPr/p:nvPr/a:videoFile")[0]
+            video_rid = audio_file.get(qn("r:link"))
+            audio_file.tag = qn("a:audioFile")
+            audio_file.set(qn("r:link"), slide.part.relate_to(slide.part.related_part(video_rid), RT.AUDIO))
+            slide.part.drop_rel(video_rid)
+
+            # ECMA-376 19.5.9/19.5.29/19.5.31: an audio child of tmRoot with
+            # delay=0 starts on slide entry; showWhenStopped=0 hides its poster.
+            audio_node = slide._element.xpath(
+                f'.//p:video[p:cMediaNode/p:tgtEl/p:spTgt[@spid="{icon.shape_id}"]]'
+            )[0]
+            audio_node.tag = qn("p:audio")
+            audio_node.set("isNarration", "1")
+            media_node = audio_node.find(qn("p:cMediaNode"))
+            media_node.set("vol", "100000")
+            media_node.set("showWhenStopped", "0")
+            media_node.set("numSld", "1")
+            media_node.find(qn("p:cTn")).set("dur", str(duration_ms))
+            media_node.find(f'./{qn("p:cTn")}/{qn("p:stCondLst")}/{qn("p:cond")}').set("delay", "0")
+
+            transition = slide._element.find(qn("p:transition"))
+            if transition is None:
+                transition = OxmlElement("p:transition")
+                slide._element.insert_element_before(transition, "p:timing", "p:extLst")
+            transition.set("advClick", "1")
+            transition.set("advTm", str(duration_ms + 1000))
+    finally:
+        repo.close()
+    return skipped
 
 
 async def _save_artifact(task, local_path: str, artifact_type: str, filename: str, content_type: str) -> str:
@@ -105,19 +172,21 @@ async def export_pptx(task) -> dict:
         if not success:
             return {"success": False, "error": result}
 
+        speech_scripts = {}
         try:
             repo = SpeechScriptRepository()
             scripts_list = await repo.get_current_speech_scripts_by_project(str(metadata["project_id"]))
             speech_scripts = {script.slide_index: script.script_content for script in scripts_list}
             repo.close()
-            if speech_scripts:
-                prs = Presentation(temp_pptx_path)
-                for index, slide in enumerate(prs.slides):
-                    if index in speech_scripts:
-                        slide.notes_slide.notes_text_frame.text = speech_scripts[index]
-                prs.save(temp_pptx_path)
         except Exception as exc:
-            logger.warning("Failed to add speech scripts to PPTX: %s", exc)
+            logger.warning("Failed to load speech scripts: %s", exc)
+
+        prs = Presentation(temp_pptx_path)
+        for index, slide in enumerate(prs.slides):
+            if index in speech_scripts:
+                slide.notes_slide.notes_text_frame.text = speech_scripts[index]
+        skipped_audio_slides = await _embed_narration_audio(prs, str(metadata["project_id"]))
+        prs.save(temp_pptx_path)
 
         await _set_progress(task.task_id, 90)
         artifact_id = await _save_artifact(
@@ -127,7 +196,7 @@ async def export_pptx(task) -> dict:
             f"{project.topic}_PPT.pptx",
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         )
-        return {"success": True, "artifact_id": artifact_id, "project_topic": project.topic, "slide_count": len(project.slides_data)}
+        return {"success": True, "artifact_id": artifact_id, "project_topic": project.topic, "slide_count": len(project.slides_data), "skipped_audio_slides": skipped_audio_slides}
     finally:
         for path in (temp_pdf_path, temp_pptx_path):
             if os.path.exists(path):
@@ -164,10 +233,10 @@ async def export_html_screenshot_pptx(task) -> dict:
             prepared_html = _prepare_html_for_file_based_export(slide.get("html_content", ""), export_base_url)
             with open(html_file, "w", encoding="utf-8") as file_obj:
                 file_obj.write(prepared_html)
-            html_files.append(html_file)
+            html_files.append((slide.get("index", index), html_file))
 
         screenshot_paths = []
-        for index, html_file in enumerate(html_files):
+        for index, (slide_index, html_file) in enumerate(html_files):
             screenshot_path = os.path.join(temp_dir, f"slide_{index}.png")
             success = await pdf_converter.screenshot_html(
                 html_file,
@@ -179,7 +248,7 @@ async def export_html_screenshot_pptx(task) -> dict:
                 stability_interval=0.2,
             )
             if success:
-                screenshot_paths.append(screenshot_path)
+                screenshot_paths.append((slide_index, screenshot_path))
             await _set_progress(task.task_id, 25 + ((index + 1) / max(len(html_files), 1)) * 55)
 
         if not screenshot_paths:
@@ -188,11 +257,14 @@ async def export_html_screenshot_pptx(task) -> dict:
         prs = Presentation()
         prs.slide_width = Inches(10)
         prs.slide_height = Inches(5.625)
-        for index, screenshot_path in enumerate(screenshot_paths):
+        for index, screenshot_path in screenshot_paths:
             slide = prs.slides.add_slide(prs.slide_layouts[6])
             slide.shapes.add_picture(screenshot_path, Inches(0), Inches(0), width=prs.slide_width, height=prs.slide_height)
             if index in speech_scripts:
                 slide.notes_slide.notes_text_frame.text = speech_scripts[index]
+        skipped_audio_slides = await _embed_narration_audio(
+            prs, str(metadata["project_id"]), slide_indices=[index for index, _ in screenshot_paths]
+        )
         prs.save(temp_pptx_path)
 
         artifact_id = await _save_artifact(
@@ -202,7 +274,7 @@ async def export_html_screenshot_pptx(task) -> dict:
             f"{project.topic}_PPT.pptx",
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         )
-        return {"success": True, "artifact_id": artifact_id, "project_topic": project.topic, "slide_count": len(slides)}
+        return {"success": True, "artifact_id": artifact_id, "project_topic": project.topic, "slide_count": len(prs.slides), "skipped_audio_slides": skipped_audio_slides}
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
         if os.path.exists(temp_pptx_path):

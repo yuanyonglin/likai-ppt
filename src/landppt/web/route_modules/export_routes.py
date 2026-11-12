@@ -514,9 +514,12 @@ async def export_project_pptx(
                         progress=90
                     )
                     
-                    # 转换成功后，添加演讲稿到备注
+                    from pptx import Presentation
+                    from ...tasks.handlers.export_tasks import _embed_narration_audio
+
+                    # 转换成功后，加载演讲稿
+                    speech_scripts = {}
                     try:
-                        from pptx import Presentation
                         from ...services.speech_script_repository import SpeechScriptRepository
 
                         # 获取演讲稿数据
@@ -525,29 +528,21 @@ async def export_project_pptx(
                         speech_scripts = {script.slide_index: script.script_content for script in scripts_list}
                         repo.close()
 
-                        if len(speech_scripts) > 0:
-                            # 打开生成的PPTX文件
-                            prs = Presentation(temp_pptx_path)
-
-                            # 为每张幻灯片添加演讲稿备注
-                            for i, slide in enumerate(prs.slides):
-                                if i in speech_scripts:
-                                    notes_slide = slide.notes_slide
-                                    text_frame = notes_slide.notes_text_frame
-                                    text_frame.text = speech_scripts[i]
-                                    logging.info(f"Added speech script to slide {i+1} notes")
-
-                            # 保存修改后的PPTX
-                            prs.save(temp_pptx_path)
-                            logging.info(f"Added {len(speech_scripts)} speech scripts to PPTX notes")
                     except Exception as e:
-                        logging.warning(f"Failed to add speech scripts to PPTX: {e}")
-                        # 继续执行，即使添加演讲稿失败也返回PPTX
+                        logging.warning(f"Failed to load speech scripts: {e}")
+
+                    prs = Presentation(temp_pptx_path)
+                    for i, slide in enumerate(prs.slides):
+                        if i in speech_scripts:
+                            slide.notes_slide.notes_text_frame.text = speech_scripts[i]
+                    skipped_audio_slides = await _embed_narration_audio(prs, project_id)
+                    prs.save(temp_pptx_path)
 
                     return {
                         "success": True,
                         "pptx_path": temp_pptx_path,
-                        "pdf_path": temp_pdf_path
+                        "pdf_path": temp_pdf_path,
+                        "skipped_audio_slides": skipped_audio_slides,
                     }
                 else:
                     # 清理临时文件
@@ -721,13 +716,13 @@ async def export_project_pptx_from_images(
                     )
                     with open(html_file, 'w', encoding='utf-8') as f:
                         f.write(prepared_html)
-                    html_files.append(html_file)
+                    html_files.append((slide.get("index", i), html_file))
                     prep_progress = 12 + ((i + 1) / max(total_slides, 1)) * 13
                     update_export_progress(prep_progress, f"正在准备第 {i + 1}/{total_slides} 张幻灯片...")
 
                 # 第3步：使用Playwright对每张幻灯片进行截图
                 update_export_progress(25, "正在渲染幻灯片图片...")
-                for i, html_file in enumerate(html_files):
+                for i, (slide_index, html_file) in enumerate(html_files):
                     screenshot_path = os.path.join(temp_dir, f"slide_{i}.png")
 
                     # 使用PDF converter的截图功能
@@ -742,7 +737,7 @@ async def export_project_pptx_from_images(
                     )
 
                     if success:
-                        screenshot_paths.append(screenshot_path)
+                        screenshot_paths.append((slide_index, screenshot_path))
                         logging.info(f"Screenshot {i+1}/{len(html_files)} completed")
                     else:
                         logging.warning(f"Screenshot {i+1} failed, skipping")
@@ -765,7 +760,7 @@ async def export_project_pptx_from_images(
                 prs.slide_width = Inches(10)
                 prs.slide_height = Inches(5.625)
 
-                for i, screenshot_path in enumerate(screenshot_paths):
+                for i, (slide_index, screenshot_path) in enumerate(screenshot_paths):
                     # 添加空白幻灯片
                     blank_slide_layout = prs.slide_layouts[6]
                     slide = prs.slides.add_slide(blank_slide_layout)
@@ -779,17 +774,23 @@ async def export_project_pptx_from_images(
                     slide.shapes.add_picture(screenshot_path, left, top, width=width, height=height)
 
                     # 如果该幻灯片有演讲稿，添加到备注中
-                    if i in speech_scripts:
+                    if slide_index in speech_scripts:
                         notes_slide = slide.notes_slide
                         text_frame = notes_slide.notes_text_frame
-                        text_frame.text = speech_scripts[i]
-                        logging.info(f"Added speech script to slide {i+1} notes")
+                        text_frame.text = speech_scripts[slide_index]
+                        logging.info(f"Added speech script to slide {slide_index+1} notes")
 
                     pptx_progress = 82 + ((i + 1) / max(len(screenshot_paths), 1)) * 13
                     update_export_progress(
                         pptx_progress,
                         f"正在写入第 {i + 1}/{len(screenshot_paths)} 页到PPTX..."
                     )
+
+                from ...tasks.handlers.export_tasks import _embed_narration_audio
+
+                skipped_audio_slides = await _embed_narration_audio(
+                    prs, project_id, slide_indices=[index for index, _ in screenshot_paths]
+                )
 
                 # 保存PPTX文件
                 update_export_progress(97, "正在保存PPTX文件...")
@@ -798,7 +799,8 @@ async def export_project_pptx_from_images(
 
                 return {
                     "success": True,
-                    "pptx_path": temp_pptx_path
+                    "pptx_path": temp_pptx_path,
+                    "skipped_audio_slides": skipped_audio_slides,
                 }
 
             except Exception as e:
