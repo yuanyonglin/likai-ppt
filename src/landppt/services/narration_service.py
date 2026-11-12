@@ -639,6 +639,10 @@ class NarrationService:
             if wanted is None:
                 wanted = set(range(len(project.slides_data)))
             wanted = set(i for i in wanted if 0 <= i < len(project.slides_data))
+            # Explainer video pages carry their own narration.
+            from .export_infra.explainer_video_assets import explainer_video_page_indices
+
+            wanted -= explainer_video_page_indices(project.slides_data)
             if not wanted:
                 return []
 
