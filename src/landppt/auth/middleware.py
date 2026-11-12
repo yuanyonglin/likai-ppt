@@ -7,6 +7,7 @@ from fastapi import Request, Response, HTTPException, Depends
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 import logging
+import re
 
 from .auth_service import get_auth_service
 from ..database.database import get_db
@@ -58,6 +59,9 @@ def _extract_session_id(request: Request) -> Optional[str]:
     return header_session or None
 
 
+_PUBLIC_EXPLAINER_FILE = re.compile(r"/api/explainer-videos/[0-9a-fA-F-]{36}/(?:video\.mp4|cover\.png)")
+
+
 class AuthMiddleware:
     """Authentication middleware"""
 
@@ -103,6 +107,10 @@ class AuthMiddleware:
         if path in self.public_paths:
             return True
         
+        # Explainer video files are served by unguessable id for share pages and exports.
+        if _PUBLIC_EXPLAINER_FILE.fullmatch(path):
+            return True
+
         # Check prefixes
         for prefix in self.public_prefixes:
             if path.startswith(prefix):

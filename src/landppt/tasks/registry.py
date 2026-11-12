@@ -23,6 +23,7 @@ def get_handler(task_type: str) -> TaskHandler:
         import landppt.tasks.handlers.export_tasks  # noqa: F401
         import landppt.tasks.handlers.unattended_tasks  # noqa: F401
         import landppt.tasks.handlers.project_agent_tasks  # noqa: F401
+        import landppt.tasks.handlers.explainer_video_tasks  # noqa: F401
     try:
         return _HANDLERS[task_type]
     except KeyError as exc:

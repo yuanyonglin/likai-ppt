@@ -211,3 +211,150 @@ async def test_migration_023_creates_table(tmp_path):
         )
     assert {"replaced_slide_backup", "script_json", "stage", "artifact_id"} <= columns
     await engine.dispose()
+
+
+# ---- generation pipeline status flow ---------------------------------------
+
+from pathlib import Path  # noqa: E402
+
+from landppt.services.explainer_video import service  # noqa: E402
+from landppt.services.explainer_video.animation import build_animation_html, build_cues  # noqa: E402
+from landppt.services.explainer_video.sources import SourceContent  # noqa: E402
+
+
+def _stub_pipeline(monkeypatch, seen, fail_stage=None):
+    async def fake_source(session, video):
+        return SourceContent(title="页面", text="内容", colors=["#C00000"])
+
+    async def write_script(user_id, source, *, duration, extra):
+        if fail_stage == "script":
+            raise RuntimeError("model down")
+        return {"title": "讲解标题", "segments": [{"text": "第一句。第二句。", "bullets": []}, {"text": "第三句。"}]}
+
+    async def provider(user_id, name):
+        return "cloud_tts"
+
+    async def synthesize(*, user_id, provider, voice, text, out_path, language="zh"):
+        out_path.write_bytes(b"x")
+        return out_path, 2000, "voice"
+
+    async def plan_scenes(user_id, script, source):
+        return [{"template": "title", "heading": "开场"}, {"template": "steps", "heading": "步骤", "items": ["a", "b"]}]
+
+    async def touch(*args):
+        path = args[-1]
+        path.write_bytes(b"x")
+        return path
+
+    async def record(html_path, total, work_dir):
+        seen.append(("html", html_path.read_text(encoding="utf-8")))
+        return work_dir / "raw.webm", 0.5
+
+    async def store(video, mp4, cover):
+        return {"artifact_id": "art-1", "video_path": "k/v.mp4", "cover_path": "k/c.png", "cover_artifact_id": "art-2"}
+
+    monkeypatch.setattr(service, "load_source", fake_source)
+    monkeypatch.setattr(service.llm, "write_script", write_script)
+    monkeypatch.setattr(service.llm, "plan_scenes", plan_scenes)
+    monkeypatch.setattr(service.tts, "resolve_provider", provider)
+    monkeypatch.setattr(service.tts, "synthesize", synthesize)
+    monkeypatch.setattr(service.render, "mix_narration", touch)
+    monkeypatch.setattr(service.render, "record_animation", record)
+    monkeypatch.setattr(service.render, "compose_mp4", touch)
+    monkeypatch.setattr(service.render, "extract_cover", touch)
+    monkeypatch.setattr(service, "store_outputs", store)
+
+
+def _watch_status(sessions, seen):
+    """Record (status, stage) every time the row is committed."""
+    from sqlalchemy import event
+
+    def listener(mapper, connection, target):
+        seen.append((target.status, target.stage))
+
+    event.listen(ExplainerVideo, "after_update", listener)
+    return lambda: event.remove(ExplainerVideo, "after_update", listener)
+
+
+@pytest.mark.asyncio
+async def test_generation_walks_stages_and_completes(sessions, monkeypatch):
+    seen = []
+    _stub_pipeline(monkeypatch, seen)
+    async with sessions() as session:
+        session.add(ExplainerVideo(
+            id="vid-2", user_id=1, source_type="slide", status="pending",
+            source_ref={"project_id": PROJECT, "slide_id": "s1"},
+            options_json={"placement": {"mode": "insert", "project_id": PROJECT}},
+        ))
+        await session.commit()
+    stop = _watch_status(sessions, seen)
+    try:
+        result = await service.run_generation("vid-2", session_factory=sessions)
+    finally:
+        stop()
+    assert result["success"] is True
+    states = [item for item in seen if item[0] != "html"]
+    assert states[:5] == [
+        ("running", "parse"), ("running", "script"), ("running", "tts"), ("running", "animation"), ("running", "render"),
+    ]
+    assert ("completed", None) in states
+
+    async with sessions() as session:
+        video = await session.get(ExplainerVideo, "vid-2")
+        assert video.status == "completed" and video.error is None
+        assert video.artifact_id == "art-1" and video.cover_path == "k/c.png"
+        # lead 0.6 + 2.0 + gap 0.4 + 2.0 + tail 0.8
+        assert video.duration_ms == 5800
+        assert [s["start"] for s in video.script_json["segments"]] == [0.6, 3.0]
+        placements = await list_placements(session, video)
+    # placement.mode=insert puts it right after the source slide.
+    assert placements and placements[0]["mode"] == "insert"
+    rows, *_ = await _state(sessions)
+    assert parse_explainer_video_id(rows[2].html_content) == "vid-2"
+
+    html = next(item[1] for item in seen if item[0] == "html")
+    assert "window.__start" in html and "第三句" in html and "#C00000" in html
+    assert "http://" not in html and "https://" not in html and "<link" not in html
+
+
+@pytest.mark.asyncio
+async def test_generation_failure_records_error_and_stage(sessions, monkeypatch):
+    _stub_pipeline(monkeypatch, [], fail_stage="script")
+    async with sessions() as session:
+        session.add(ExplainerVideo(id="vid-3", user_id=1, source_type="text", status="pending",
+                                   source_ref={"title": "t", "text": "x"}))
+        await session.commit()
+    with pytest.raises(RuntimeError):
+        await service.run_generation("vid-3", session_factory=sessions)
+    async with sessions() as session:
+        video = await session.get(ExplainerVideo, "vid-3")
+    assert (video.status, video.stage, video.error) == ("failed", "script", "model down")
+
+
+def test_cues_follow_segment_timing_and_html_escapes_text():
+    cues = build_cues(["你好。世界！"], [1.0], [2.0])
+    assert cues == [[1.0, 2.0, "你好。"], [2.0, 3.0, "世界！"]]
+    html = build_animation_html(
+        title="<b>t</b>", scenes=[{"template": "bullets", "heading": "</script><x>", "items": ["a"]}],
+        starts=[0.6], durations=[2.0], cues=[[0.6, 2.6, "</script>"]], total=3.4,
+        theme={"bg": "#fff", "primary": "#000"},
+    )
+    assert "</script><x>" not in html and "&lt;/script&gt;&lt;x&gt;" in html
+    assert html.count("</script>") == 1
+
+
+@pytest.mark.asyncio
+async def test_upload_sections_by_heading_and_reload(tmp_path, monkeypatch):
+    from landppt.services.explainer_video import sources
+
+    monkeypatch.setattr(sources, "UPLOADS_ROOT", tmp_path)
+    md = "# 总览\n介绍\n\n## 第一部分\n内容一 ![img](a.png)\n\n## 第二部分\n内容二\n".encode()
+    payload = await sources.store_upload(7, "doc.md", md)
+    assert [s["title"] for s in payload["sections"]] == ["总览", "第一部分", "第二部分"]
+    assert "img" not in payload["sections"][1]["text"]
+    section = sources.load_upload_section(7, payload["file_id"], 2)
+    assert section.title == "第二部分" and "内容二" in section.text
+    with pytest.raises(sources.SourceError):
+        sources.load_upload_section(8, payload["file_id"], 0)  # another user's upload
+    with pytest.raises(sources.SourceError):
+        await sources.store_upload(7, "a.exe", b"x")
