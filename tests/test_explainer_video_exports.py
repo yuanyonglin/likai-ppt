@@ -85,6 +85,53 @@ def test_swap_video_page_for_cover(tmp_path, video_files):
     assert "<video" not in content
 
 
+def _playwright_converter():
+    from landppt.services.pyppeteer_pdf_converter import PlaywrightPDFConverter
+
+    converter = PlaywrightPDFConverter()
+    if not converter.is_available():
+        pytest.skip("Playwright not available")
+    return converter
+
+
+@pytest.mark.asyncio
+async def test_pdf_and_screenshot_render_video_page_as_cover(tmp_path, video_files):
+    """Real Chromium render: the video page becomes its cover, other pages are untouched."""
+    fitz = pytest.importorskip("fitz")
+    converter = _playwright_converter()
+    video_files("v1", color=(220, 30, 30))
+    normal = tmp_path / "slide_1.html"
+    normal.write_text(
+        "<html><body style='margin:0'><div style='width:1280px;height:720px;background:rgb(30,200,30)'></div></body></html>",
+        encoding="utf-8",
+    )
+    page = tmp_path / "slide_2.html"
+    page.write_text(f"<html><body style='margin:0'>{video_page_html('v1')}</body></html>", encoding="utf-8")
+
+    try:
+        png = tmp_path / "shot.png"
+        assert await converter.screenshot_html(str(page), str(png), width=1280, height=720, optimize_for_static=True)
+        shot = Image.open(png).convert("RGB")
+        assert shot.getpixel((shot.width // 2, shot.height // 2))[:3] == pytest.approx((220, 30, 30), abs=6)
+
+        pdf_dir = tmp_path / "pdfs"
+        pdf_dir.mkdir()
+        merged = tmp_path / "merged.pdf"
+        await converter.convert_multiple_html_to_pdf([str(normal), str(page)], str(pdf_dir), str(merged))
+    finally:
+        await converter.close()
+
+    doc = fitz.open(str(merged))
+    assert doc.page_count == 2
+    assert doc[0].rect == doc[1].rect
+    colors = []
+    for pdf_page in doc:
+        pix = pdf_page.get_pixmap(dpi=36)
+        colors.append(tuple(pix.pixel(pix.width // 2, pix.height // 2)))
+    assert colors[0] == pytest.approx((30, 200, 30), abs=6)
+    assert colors[1] == pytest.approx((220, 30, 30), abs=6)
+
+
 @pytest.mark.asyncio
 async def test_speech_scripts_skip_video_pages_keep_indices(monkeypatch):
     from landppt.services import speech_script_service as module

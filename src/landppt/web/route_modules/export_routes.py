@@ -535,7 +535,9 @@ async def export_project_pptx(
                     for i, slide in enumerate(prs.slides):
                         if i in speech_scripts:
                             slide.notes_slide.notes_text_frame.text = speech_scripts[i]
-                    skipped_audio_slides = await _embed_narration_audio(prs, project_id)
+                    skipped_audio_slides = await _embed_narration_audio(
+                        prs, project_id, slides_data=project.slides_data
+                    )
                     prs.save(temp_pptx_path)
 
                     return {
@@ -789,7 +791,10 @@ async def export_project_pptx_from_images(
                 from ...tasks.handlers.export_tasks import _embed_narration_audio
 
                 skipped_audio_slides = await _embed_narration_audio(
-                    prs, project_id, slide_indices=[index for index, _ in screenshot_paths]
+                    prs,
+                    project_id,
+                    slide_indices=[index for index, _ in screenshot_paths],
+                    slides_data=project.slides_data,
                 )
 
                 # 保存PPTX文件

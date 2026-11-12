@@ -16,6 +16,7 @@ from pptx.oxml.xmlchemy import OxmlElement
 from pptx.util import Inches
 
 from ...services.background_tasks import TaskStatus, get_task_manager
+from ...services.export_infra.explainer_video_assets import explainer_video_pages
 from ...services.narration_audio_repository import NarrationAudioRepository
 from ...services.pdf_to_pptx_converter import get_pdf_to_pptx_converter
 from ...services.pyppeteer_pdf_converter import get_pdf_converter
@@ -53,14 +54,36 @@ _AUTOPLAY_AUDIO_TIMING = (
 )
 
 
-async def _embed_narration_audio(prs, project_id: str, language: str = "zh", *, slide_indices=None) -> list[int]:
-    """Embed cached narration; indices are zero-based, returned page numbers one-based."""
+def _embed_explainer_video(prs, slide, asset) -> None:
+    """Cover the whole slide with the playable explainer video (click to play)."""
+    slide.shapes.add_movie(
+        str(asset.video_path),
+        0,
+        0,
+        prs.slide_width,
+        prs.slide_height,
+        poster_frame_image=str(asset.cover_path),
+        mime_type="video/mp4",
+    )
+
+
+async def _embed_narration_audio(
+    prs, project_id: str, language: str = "zh", *, slide_indices=None, slides_data=None
+) -> list[int]:
+    """Embed cached narration, or the video on explainer video pages.
+
+    Indices are zero-based, returned page numbers one-based.
+    """
     project_root = Path(__file__).resolve().parents[4]
     indices = range(len(prs.slides)) if slide_indices is None else slide_indices
+    video_pages = explainer_video_pages(slides_data or [])
     skipped = []
     repo = NarrationAudioRepository()
     try:
         for index, slide in zip(indices, prs.slides, strict=True):
+            if index in video_pages:
+                _embed_explainer_video(prs, slide, video_pages[index])
+                continue
             audio = await repo.get_latest_for_slide(project_id=project_id, slide_index=index, language=language)
             if audio is None or not (project_root / audio.file_path).is_file():
                 skipped.append(index + 1)
@@ -203,7 +226,9 @@ async def export_pptx(task) -> dict:
         for index, slide in enumerate(prs.slides):
             if index in speech_scripts:
                 slide.notes_slide.notes_text_frame.text = speech_scripts[index]
-        skipped_audio_slides = await _embed_narration_audio(prs, str(metadata["project_id"]))
+        skipped_audio_slides = await _embed_narration_audio(
+            prs, str(metadata["project_id"]), slides_data=project.slides_data
+        )
         prs.save(temp_pptx_path)
 
         await _set_progress(task.task_id, 90)
@@ -281,7 +306,10 @@ async def export_html_screenshot_pptx(task) -> dict:
             if index in speech_scripts:
                 slide.notes_slide.notes_text_frame.text = speech_scripts[index]
         skipped_audio_slides = await _embed_narration_audio(
-            prs, str(metadata["project_id"]), slide_indices=[index for index, _ in screenshot_paths]
+            prs,
+            str(metadata["project_id"]),
+            slide_indices=[index for index, _ in screenshot_paths],
+            slides_data=project.slides_data,
         )
         prs.save(temp_pptx_path)
 
