@@ -30,7 +30,15 @@ WIDE_SHAPE = 0.6
 COLUMN_GAP = 0.08
 
 
+IMAGE_HINT = (
+    "（这一页是图片，未识别出文字。请在系统设置中配置“多模态视觉分析模型”后读取图片内容，"
+    "或改用“直接描述”。）"
+)
+
+
 def _section(index, title, text, image_only=False):
+    if image_only and not text:
+        text = IMAGE_HINT
     return {"index": index, "title": title, "text": text, "image_only": image_only}
 
 
@@ -52,6 +60,19 @@ def _walk(shapes):
             yield shape
 
 
+def _chart_text(chart):
+    """Series values from the chart XML; python-pptx's plot API rejects 3D,
+    stock and surface charts."""
+    lines = []
+    for series in chart._chartSpace.xpath(".//c:ser"):
+        name = "".join(series.xpath("./c:tx//c:v/text()")) or "数据"
+        categories = series.xpath("./c:cat//c:pt/c:v/text()")
+        values = series.xpath("./c:val//c:pt/c:v/text()")
+        pairs = zip(categories, values) if categories else enumerate(values, 1)
+        lines.append(f"{name}：" + "，".join(f"{c} {v}" for c, v in pairs))
+    return "图表数据\n" + "\n".join(lines) if lines else ""
+
+
 def _shape_text(shape):
     if shape.has_text_frame:
         return shape.text_frame.text.strip()
@@ -62,16 +83,25 @@ def _shape_text(shape):
         ]
         return "\n".join(rows)
     if getattr(shape, "has_chart", False) and shape.has_chart:
-        chart = shape.chart
-        categories = [str(c) for c in chart.plots[0].categories] if chart.plots else []
-        lines = []
-        for series in chart.series:
-            values = "，".join(
-                f"{c} {v}" for c, v in zip(categories, series.values)
-            )
-            lines.append(f"{series.name}：{values}")
-        return "图表数据\n" + "\n".join(lines)
+        return _chart_text(shape.chart)
     return ""
+
+
+def _picture_blob(shape):
+    """Embedded image bytes; linked pictures raise ValueError and have none."""
+    try:
+        return shape.image.blob
+    except (AttributeError, ValueError):
+        return None
+
+
+def _font_size(shape):
+    if not shape.has_text_frame:
+        return 0
+    return max(
+        (run.font.size for p in shape.text_frame.paragraphs for run in p.runs if run.font.size),
+        default=0,
+    )
 
 
 def _columns(boxes, slide_width):
@@ -89,13 +119,28 @@ def _columns(boxes, slide_width):
     return [b for column in columns for b in sorted(column, key=lambda b: b["top"])]
 
 
-def _ordered_text(slide, slide_width):
+def _ordered_boxes(boxes, slide_width):
+    """Wide boxes (titles, banners) cut the slide into horizontal bands; the
+    narrow boxes in each band are read column by column."""
+    wide = sorted((b for b in boxes if b["wide"]), key=lambda b: b["top"])
+    bands = [[] for _ in range(len(wide) + 1)]
+    for box in boxes:
+        if not box["wide"]:
+            bands[sum(1 for w in wide if w["top"] <= box["top"])].append(box)
+    ordered = _columns(bands[0], slide_width)
+    for banner, band in zip(wide, bands[1:]):
+        ordered += [banner] + _columns(band, slide_width)
+    return ordered
+
+
+def _parse_slide(slide, slide_width):
     boxes, pictures = [], []
     for shape in _walk(slide.shapes):
         if shape.width is None or shape.left is None:
             continue
-        if hasattr(shape, "image"):
-            pictures.append(shape)
+        blob = _picture_blob(shape)
+        if blob:
+            pictures.append((shape.width * shape.height, blob))
         text = _shape_text(shape)
         if text:
             boxes.append(
@@ -104,35 +149,30 @@ def _ordered_text(slide, slide_width):
                     "left": shape.left,
                     "top": shape.top,
                     "wide": shape.width > WIDE_SHAPE * slide_width,
+                    "size": _font_size(shape),
                 }
             )
-    narrow = [b for b in boxes if not b["wide"]]
-    body_top = min((b["top"] for b in narrow), default=None)
-    head = [b for b in boxes if b["wide"] and (body_top is None or b["top"] <= body_top)]
-    tail = [b for b in boxes if b["wide"] and b not in head]
-    ordered = (
-        sorted(head, key=lambda b: b["top"])
-        + _columns(narrow, slide_width)
-        + sorted(tail, key=lambda b: b["top"])
-    )
-    return [b["text"] for b in ordered], pictures
-
-
-def _largest_picture(pictures):
-    return max(pictures, key=lambda p: p.width * p.height, default=None)
+    ordered = _ordered_boxes(boxes, slide_width)
+    title_shape = slide.shapes.title
+    title = title_shape.text_frame.text.strip() if title_shape is not None else ""
+    if not title and ordered:
+        # No title placeholder: the largest font among the first few worded
+        # boxes, so a small tag above the title loses and KPI figures never win.
+        words = [b for b in ordered if re.search(r"[^\W\d_]", b["text"])][:3] or ordered
+        title = _first_line(max(words, key=lambda b: b["size"])["text"], "")
+    body = "\n".join(b["text"] for b in ordered)
+    picture = max(pictures, key=lambda p: p[0])[1] if pictures else None
+    return title, body, picture
 
 
 def _parse_pptx(path):
     prs = Presentation(path)
     sections = []
     for index, slide in enumerate(prs.slides):
-        parts, pictures = _ordered_text(slide, prs.slide_width)
-        title_shape = slide.shapes.title
-        title = title_shape.text_frame.text.strip() if title_shape is not None else ""
-        body = "\n".join(parts)
-        image_only = not body and bool(pictures)
+        title, body, picture = _parse_slide(slide, prs.slide_width)
+        image_only = not body and picture is not None
         if image_only:
-            body = _ocr(_largest_picture(pictures).image.blob)
+            body = _ocr(picture)
         notes = ""
         if slide.has_notes_slide and slide.notes_slide.notes_text_frame is not None:
             notes = slide.notes_slide.notes_text_frame.text.strip()
@@ -267,7 +307,11 @@ def _parse(path, filename):
     if suffix == ".docx":
         return _parse_docx(path, stem)
     if suffix in {".md", ".txt"}:
-        text = Path(path).read_text(encoding="utf-8", errors="replace")
+        raw = Path(path).read_bytes()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            text = raw.decode("gbk", errors="replace")  # files saved by Chinese Windows
         if suffix == ".txt":
             return [_section(0, stem, text.strip())]
         return _parse_markdown(text, stem)
@@ -283,8 +327,12 @@ async def parse_source_sections(file_path: str, filename: str) -> list[dict]:
 
 def sections_to_text(sections: list[dict], unit: str = "页") -> str:
     """Join sections into one document for the existing outline flow."""
+    def body(section):
+        first, _, rest = section["text"].partition("\n")
+        return rest.strip() if first.strip() == section["title"] else section["text"]
+
     return "\n\n".join(
-        f"## 第 {s['index'] + 1} {unit}：{s['title']}\n{s['text']}".strip() for s in sections
+        f"## 第 {s['index'] + 1} {unit}：{s['title']}\n{body(s)}".strip() for s in sections
     )
 
 
@@ -292,9 +340,8 @@ def section_image(file_path: str, filename: str, index: int) -> bytes | None:
     """PNG of the picture that fills an image-only page, or of the PDF page."""
     suffix = Path(filename).suffix.lower()
     if suffix == ".pptx":
-        slide = Presentation(file_path).slides[index]
-        picture = _largest_picture([s for s in _walk(slide.shapes) if hasattr(s, "image")])
-        raw = picture.image.blob if picture is not None else None
+        prs = Presentation(file_path)
+        raw = _parse_slide(prs.slides[index], prs.slide_width)[2]
     elif suffix == ".pdf":
         with fitz.open(file_path) as doc:
             return _page_png(doc[index])
@@ -329,7 +376,8 @@ async def describe_section_image(
     from .service_instances import get_ppt_service_for_user
 
     config = await get_db_config_service().get_all_config(user_id=user_id)
-    if not (config.get("vision_analysis_model_provider") and config.get("vision_analysis_model_name")):
+    # The role lookup silently falls back to the default text model, which cannot see.
+    if not config.get("vision_analysis_model_name"):
         return None
     image = await asyncio.to_thread(section_image, file_path, filename, index)
     if image is None:

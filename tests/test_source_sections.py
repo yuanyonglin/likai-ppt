@@ -6,7 +6,7 @@ from docx import Document
 from pptx import Presentation
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE
-from pptx.util import Inches
+from pptx.util import Inches, Pt
 
 from landppt.services import file_processor as fp_mod
 from landppt.services.source_sections import (
@@ -69,7 +69,7 @@ def test_pptx_sections_have_title_body_notes_and_chart(tmp_path):
     first = sections[0]
     assert first["title"] == "核心指标" and not first["image_only"]
     assert "区域 | 增速" in first["text"] and "华东 | 21%" in first["text"]
-    assert "营收：Q1 12.0，Q2 15.0" in first["text"]
+    assert "营收：Q1 12，Q2 15" in first["text"]
     assert first["text"].endswith("备注：重点讲 Q4")
 
 
@@ -182,3 +182,61 @@ def test_describe_section_image_uses_vision_role_only_when_configured(tmp_path, 
     assert asyncio.run(describe_section_image(str(path), "deck.pptx", 2, 1)) == "图片页文字"
     assert calls[0][0] == "vision_analysis"
     assert calls[0][1].startswith("data:image/png;base64,")
+
+
+def edge_deck(path):
+    """A 3D chart, a linked picture, a tag above a title without placeholder,
+    and a blank picture page."""
+    from pptx.oxml.ns import qn
+
+    prs = Presentation()
+    prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    tag = s.shapes.add_textbox(Inches(0.5), Inches(0.2), Inches(2), Inches(0.4)).text_frame
+    tag.text = "PART 02"
+    tag.paragraphs[0].runs[0].font.size = Pt(12)
+    title = s.shapes.add_textbox(Inches(0.5), Inches(0.7), Inches(12), Inches(1)).text_frame
+    title.text = "区域经营对比"
+    title.paragraphs[0].runs[0].font.size = Pt(40)
+    s.shapes.add_textbox(Inches(0.5), Inches(2), Inches(5), Inches(0.5)).text_frame.text = "左栏"
+    s.shapes.add_textbox(Inches(7), Inches(2), Inches(5), Inches(0.5)).text_frame.text = "右栏"
+    data = CategoryChartData()
+    data.categories = ["华东", "华南"]
+    data.add_series("营收", (8.2, 5.1))
+    chart = s.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED, Inches(7), Inches(3), Inches(5), Inches(3), data).chart
+    bar = chart._chartSpace.find(".//" + qn("c:barChart"))
+    bar.tag = qn("c:bar3DChart")
+    picture = s.shapes.add_picture(BytesIO(text_image("外链")), Inches(1), Inches(4), Inches(2), Inches(1))
+    blip = picture._element.blipFill.blip
+    blip.set(qn("r:link"), blip.get(qn("r:embed")))
+    del blip.attrib[qn("r:embed")]
+
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    blank = fitz.open().new_page(width=640, height=360).get_pixmap().tobytes("png")
+    s.shapes.add_picture(BytesIO(blank), 0, 0, prs.slide_width, prs.slide_height)
+    prs.save(path)
+
+
+def test_pptx_edge_cases_do_not_break_parsing(tmp_path):
+    path = tmp_path / "edge.pptx"
+    edge_deck(path)
+    first, blank = parse(path, "edge.pptx")
+
+    assert first["title"] == "区域经营对比"
+    assert first["text"].splitlines()[:4] == ["PART 02", "区域经营对比", "左栏", "右栏"]
+    assert "营收：华东 8.2，华南 5.1" in first["text"]
+    assert not first["image_only"]
+
+    assert blank["image_only"] and "多模态视觉分析模型" in blank["text"]
+    assert blank["title"] == "第 2 页"
+
+
+def test_sections_to_text_does_not_repeat_title():
+    text = sections_to_text([{"index": 0, "title": "核心指标", "text": "核心指标\n营收增长", "image_only": False}])
+    assert text == "## 第 1 页：核心指标\n营收增长"
+
+
+def test_gbk_text_file(tmp_path):
+    path = tmp_path / "旧.md"
+    path.write_bytes("# 标题\n正文".encode("gbk"))
+    assert parse(path, "旧.md")[0]["title"] == "标题"
