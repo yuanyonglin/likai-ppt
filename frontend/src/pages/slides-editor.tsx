@@ -17,6 +17,7 @@ import { createEditorController } from '../controllers/editor-controller';
 import { ProjectAgent } from '../components/project-agent';
 import { ContinuousPreview } from '../components/continuous-preview';
 import { EditorStartup } from '../components/editor-startup';
+import { ExplainerEditorTools } from '../components/explainer-video-editor';
 import '../components/native-surfaces.css';
 import './slides-editor.css';
 
@@ -214,6 +215,7 @@ export default function SlidesEditor({ data }: { data: ApiData }) {
   }, [state.toasts, taskDialog?.key, notification]);
   useEffect(() => () => { previousToasts.current.forEach((_, key) => notification.destroy(key)); }, [notification]);
   const save = () => { void controller.save(); };
+  const [explainerOpen, setExplainerOpen] = useState(false);
   const call = (name: string, ...args: unknown[]) => controller.call(name, ...args);
   const toolbar = <div className="editor-ant-toolbar" role="toolbar" aria-label="幻灯片编辑工具">
     <div className="editor-ant-view"><Segmented aria-label="编辑视图" value={state.mode === 'quickedit' ? 'preview' : state.mode} options={[
@@ -225,7 +227,7 @@ export default function SlidesEditor({ data }: { data: ApiData }) {
       ] }}><Button disabled={!state.count} title="重新生成" icon={<ReloadOutlined aria-hidden />}>重新生成</Button></Dropdown>
       <EditorExportChooser projectTitle={data.title} count={state.count} client={state.clientExport} native={state.nativeExport} vector={state.vectorExport} standard={!!data.standardExport} saving={saving || state.documentSaving} run={call} />
       <Dropdown trigger={['click']} onOpenChange={open => { if (!open) queueMicrotask(() => moreRef.current?.focus()); }} menu={{ items: [
-        { key: 'template', label: '更换模板', onClick: () => call('showChangeTemplateDialog') }, { key: 'share', label: '分享链接', onClick: () => call('showShareDialog') }, { key: 'speech', label: '生成演讲稿', onClick: () => call('showSpeechScriptDialog') }, { key: 'chat', label: '自由对话（当前页）', disabled: state.svg, onClick: () => call('openNativeChatDialog') },
+        { key: 'template', label: '更换模板', onClick: () => call('showChangeTemplateDialog') }, { key: 'share', label: '分享链接', onClick: () => call('showShareDialog') }, { key: 'speech', label: '生成演讲稿', onClick: () => call('showSpeechScriptDialog') }, { key: 'explainer', label: '🎬 生成本页讲解视频', disabled: !state.count || !!state.currentVideoId, onClick: () => setExplainerOpen(true) }, { key: 'chat', label: '自由对话（当前页）', disabled: state.svg, onClick: () => call('openNativeChatDialog') },
       ] }}><Button ref={moreRef} aria-label="更多工具" icon={<EllipsisOutlined aria-hidden />} /></Dropdown>
     </Space>
   </div>;
@@ -246,6 +248,7 @@ export default function SlidesEditor({ data }: { data: ApiData }) {
     <EditorQuickIcons />
     {state.commandError && createPortal(<Alert type="error" showIcon title={state.commandError} />, document.getElementById('editorAntToolbar')!)}
     {createPortal(<EditorDocumentSidebar projectId={String(data.projectId)} pages={state.documentPages} current={state.current} selected={state.selected} dialogCount={state.dialogs.length} bridge={controller} onNavigate={() => { openView('slides'); setContinuous(false); }} />, document.getElementById('editorAntSidebar')!)}
+    <ExplainerEditorTools projectId={String(data.projectId)} page={{ slideId: state.currentSlideId, videoId: state.currentVideoId, index: state.current, title: state.title }} dialogOpen={explainerOpen} closeDialog={() => setExplainerOpen(false)} save={() => controller.save()} deleteCurrent={() => call('deleteSlide')} toolbar={document.getElementById('editorAntToolbar')} />
     <EditorThumbnailMenu state={state.contextMenu} run={controller.runContextAction} dismiss={controller.dismissContextMenu} />
     {createPortal(<header className="editor-ant-header"><Button aria-label="展开或收起幻灯片列表" aria-expanded={state.sidebar} aria-controls="slidesSidebar" icon={<BarsOutlined aria-hidden />} onClick={() => controller.call('toggleSidebar')} /><div className="editor-ant-title"><h1 title={data.title}>{data.title}</h1><span>{state.count ? `第 ${state.current + 1} / ${state.count} 页` : "暂无幻灯片"}{state.svg && <Tag>SVG</Tag>}</span></div>{workspace && <Segmented className="workspace-tabs" aria-label="项目工作区视图" value={view} options={[{ value: 'overview', label: '概览' }, { value: 'planning', label: '大纲' }, { value: 'generate', label: '生成' }, { value: 'slides', label: '编辑' }]} onChange={openView} />}<Button href="/projects" icon={<ArrowLeftOutlined aria-hidden />}>项目列表</Button></header>, document.getElementById('editorAntHeader')!)}
     {createPortal(toolbar, document.getElementById('editorAntToolbar')!)}

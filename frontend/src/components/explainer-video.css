@@ -43,3 +43,4 @@
 
 .explainer-video-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; }
 .explainer-video-bar .explainer-video-bar-spacer { flex: 1; }
+.explainer-dialog-label { margin: 12px 0 6px; }

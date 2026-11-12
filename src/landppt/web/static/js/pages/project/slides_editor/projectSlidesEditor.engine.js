@@ -9,7 +9,7 @@
         'setMode', 'selectSlide', 'saveSlide', 'toggleQuickEditMode', 'startSlideshow', 'insertNewSlide',
         'openAIEditSidebar', 'closeAIEditSidebar', 'showSlideOutline', 'autoRepairSlideLayout',
         'autoGenerateSlideImages', 'quickRegenerateSlide', 'regenerateSelectedSlides', 'regenerateAllSlides',
-        'showChangeTemplateDialog', 'showShareDialog', 'showSpeechScriptDialog', 'openNativeChatDialog',
+        'showChangeTemplateDialog', 'showShareDialog', 'showSpeechScriptDialog', 'openNativeChatDialog', 'deleteSlide',
         'exportSlidesToPptxClient', 'exportSvgPagesToPptx', 'exportToPPTX', 'exportToPPTXAsImages',
         'exportToPDF', 'downloadHTML', 'applyMainFrameScale', 'applyThumbnailPreviewScaleToAll', 'resizeCodeMirror', 'refreshQuickAiPopoverLayout',
     ]);
@@ -30,6 +30,7 @@
         return {
             mode: currentMode, current: currentSlideIndex, count: slidesData.length,
             title: slidesData[currentSlideIndex]?.title || '', selected: selectedSlideIndices.size,
+            currentSlideId: slidesData[currentSlideIndex]?.slide_id || null, currentVideoId: explainerVideoId(slidesData[currentSlideIndex]?.html_content),
             documentPages: pages(), previewPages: slidesData.map(slide => ({ title: slide.title, html: slide.html_content })), svg: currentSlideIsSvg(), saving: !!saving,
             sidebar: window.LandPPTEditorLayout.read(), aiOpen, aiWidth,
             packageContent: !!window.LandPPTPackageEditor?.available,
@@ -88,6 +89,7 @@
             if (name === 'toggleSidebar') return window.LandPPTEditorLayout.toggle();
             if (name === 'openPackageEditor') return window.LandPPTPackageEditor?.open();
             if (name === 'insertNewSlide') contextMenuSlideIndex = Math.max(-1, currentSlideIndex);
+            if (name === 'deleteSlide') contextMenuSlideIndex = currentSlideIndex;
             if (!commands.has(name) || typeof window[name] !== 'function') throw new Error(`编辑操作不可用：${name}`);
             return window[name](...args);
         },

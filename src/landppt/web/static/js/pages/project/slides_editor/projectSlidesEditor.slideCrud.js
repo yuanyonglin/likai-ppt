@@ -504,7 +504,7 @@ function refreshSidebar() {
                 <iframe title="Slide ${index + 1}"
                         loading="lazy"></iframe>
             </div>
-            <div class="slide-title">${(typeof isSvgRenderedSlide === 'function' && isSvgRenderedSlide(slide)) ? '<span class="slide-mode-badge" title="SVG 实验页">SVG</span>' : ''}</div>
+            <div class="slide-title">${(typeof isSvgRenderedSlide === 'function' && isSvgRenderedSlide(slide)) ? '<span class="slide-mode-badge" title="SVG 实验页">SVG</span>' : ''}${explainerVideoId(slide.html_content) ? '<span class="slide-mode-badge" title="讲解视频页">🎬 视频页</span>' : ''}</div>
             <div class="drag-indicator bottom"></div>
         `;
 
