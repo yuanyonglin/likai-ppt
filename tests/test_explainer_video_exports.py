@@ -205,3 +205,160 @@ async def test_narration_scripts_exclude_video_pages(monkeypatch):
     result = await service._ensure_speech_scripts(project_id="p", language="zh")
     assert [s.slide_index for s in result] == [0, 2]
     assert await service._ensure_speech_scripts(project_id="p", language="zh", slide_indices=[1]) == []
+
+
+# --- narration video export ------------------------------------------------------------
+
+
+def _ffmpeg(*args):
+    subprocess.run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", *args], check=True)
+
+
+def _probe(path, entries, stream=None):
+    args = ["ffprobe", "-v", "error"]
+    if stream:
+        args += ["-select_streams", stream]
+    out = subprocess.run(
+        [*args, "-show_entries", entries, "-of", "json", str(path)], check=True, capture_output=True, text=True
+    ).stdout
+    return json.loads(out)
+
+
+def _duration(path):
+    return float(_probe(path, "format=duration")["format"]["duration"])
+
+
+def _mean_volume(path, start, duration):
+    err = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-ss", f"{start}", "-t", f"{duration}", "-i", str(path), "-af", "volumedetect",
+         "-vn", "-f", "null", "-"],
+        capture_output=True, text=True,
+    ).stderr
+    line = next(l for l in err.splitlines() if "mean_volume" in l)
+    return float(line.split("mean_volume:")[1].split("dB")[0])
+
+
+def _frame_color(path, at):
+    out = subprocess.run(
+        ["ffmpeg", "-v", "error", "-ss", f"{at}", "-i", str(path), "-frames:v", "1", "-vf", "scale=1:1",
+         "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        capture_output=True, check=True,
+    ).stdout
+    return tuple(out[:3])
+
+
+@pytest.fixture
+def narration_export(tmp_path, monkeypatch, video_files):
+    """Project: [narrated green slide 1.5s, explainer video 2.0s (blue + 880Hz tone), narrated green 1.0s]."""
+    from landppt.services import (
+        narration_audio_repository,
+        narration_service,
+        speech_script_repository,
+        video_export_service,
+    )
+
+    for index, seconds in ((0, 1.5), (2, 1.0)):
+        _ffmpeg("-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}", "-ar", "24000", "-ac", "1",
+                str(tmp_path / f"n{index}.mp3"))
+    video = tmp_path / "explainer.mp4"
+    _ffmpeg("-f", "lavfi", "-i", "color=c=blue:s=320x180:r=25:d=2", "-f", "lavfi", "-i",
+            "sine=frequency=880:duration=2", "-ar", "44100", "-ac", "2", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-shortest", str(video))
+    video_files("v1", video_path=video)
+
+    audios = [
+        narration_service.NarrationAudioResult(
+            slide_index=i, language="zh", voice="", rate="+0%", audio_path=str(tmp_path / f"n{i}.mp3"),
+            duration_ms=ms, cached=True,
+        )
+        for i, ms in ((0, 1500), (2, 1000))
+    ]
+
+    class FakeNarration:
+        def __init__(self, user_id=None):
+            pass
+
+        async def generate_project_slide_audios(self, **kwargs):
+            return audios
+
+    class FakeRepo:
+        async def get_current_speech_scripts_by_project(self, *a, **k):
+            # A stale script on the video page index must not produce subtitles.
+            return [SimpleNamespace(slide_index=i, script_content=f"讲稿{i}") for i in (0, 1, 2)]
+
+        async def list_by_project(self, **kwargs):
+            return []
+
+        def close(self):
+            pass
+
+    recorded, shot = [], []
+
+    async def record_html_video(html_path, out_path, *, width, height, duration_ms, **kwargs):
+        recorded.append(Path(html_path).name)
+        _ffmpeg("-f", "lavfi", "-i", f"color=c=0x00FF00:s={width}x{height}:r=25:d={duration_ms / 1000}",
+                "-c:v", "libvpx", "-b:v", "200k", out_path)
+        return True
+
+    async def screenshot_html(html_path, png_path, *, width, height, **kwargs):
+        shot.append(Path(html_path).name)
+        Image.new("RGB", (width, height), (0, 255, 0)).save(png_path)
+        return True
+
+    render = SimpleNamespace(is_available=lambda: True, record_html_video=record_html_video,
+                             screenshot_html=screenshot_html)
+    monkeypatch.setattr(narration_service, "NarrationService", FakeNarration)
+    monkeypatch.setattr(speech_script_repository, "SpeechScriptRepository", FakeRepo)
+    monkeypatch.setattr(narration_audio_repository, "NarrationAudioRepository", FakeRepo)
+    monkeypatch.setattr(video_export_service.NarrationVideoExportService, "_get_html_render_service",
+                        staticmethod(lambda: render))
+    monkeypatch.setenv("LANDPPT_NARRATION_VIDEO_PAD_RECORD_MS", "600")
+    project = SimpleNamespace(
+        project_id="p-video", topic="demo", user_id=1,
+        slides_data=[{"html_content": "<p>a</p>"}, {"html_content": video_page_html("v1")}, {"html_content": "<p>c</p>"}],
+    )
+    return video_export_service.NarrationVideoExportService(), project, recorded, shot
+
+
+@needs_ffmpeg
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["live", "static"])
+async def test_narration_video_splices_explainer_video_with_original_sound(narration_export, tmp_path, mode):
+    service, project, recorded, shot = narration_export
+    width, height = 320, 180
+    export = service._export_project_video_live if mode == "live" else service._export_project_video_static
+    result = await export(
+        project=project, language="zh", fps=30, width=width, height=height, embed_subtitles=False,
+        subtitle_style=None, uploads_dir=str(tmp_path / "uploads"),
+    )
+    assert result["success"], result
+    rendered = recorded if mode == "live" else shot
+    assert rendered == ["slide_0.html", "slide_2.html"]  # video page is never rendered
+
+    out = Path(result["video_path"])
+    assert _duration(out) == pytest.approx(4.5, abs=0.15)
+    stream = _probe(out, "stream=width,height", "v:0")["streams"][0]
+    assert (stream["width"], stream["height"]) == (width, height)
+    # Video page window [1.5s, 3.5s] shows the explainer video (blue) with its own sound.
+    assert _frame_color(out, 0.7)[1] > 150  # green slide
+    r, g, b = _frame_color(out, 2.5)
+    assert b > 150 and g < 80
+    assert _frame_color(out, 4.0)[1] > 150
+    for start in (0.2, 1.7, 3.7):
+        assert _mean_volume(out, start, 0.6) > -40
+
+    srt = Path(result["subtitle_path"]).read_text(encoding="utf-8")
+    assert "讲稿1" not in srt and "讲稿0" in srt and "讲稿2" in srt
+    # The third slide's subtitles start after the video page.
+    assert "00:00:03,500" in srt
+
+
+@pytest.mark.asyncio
+async def test_narration_video_fails_when_explainer_video_missing(narration_export, tmp_path, monkeypatch):
+    service, project, _, _ = narration_export
+    monkeypatch.setattr(assets, "_query_video_files", lambda video_id: None)
+    with pytest.raises(FileNotFoundError, match="v1"):
+        await service._export_project_video_static(
+            project=project, language="zh", fps=30, width=320, height=180, embed_subtitles=False,
+            subtitle_style=None, uploads_dir=str(tmp_path / "uploads"),
+        )
