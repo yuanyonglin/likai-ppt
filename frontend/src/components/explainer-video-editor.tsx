@@ -11,6 +11,8 @@ import { buildCreateBody, formatClock, placementOf, type ExplainerVideo, type Pl
 type EditorPage = { slideId: string | null; videoId: string | null; index: number; title: string };
 type Props = { projectId: string; page: EditorPage; dialogOpen: boolean; closeDialog: () => void; save: () => Promise<unknown>; deleteCurrent: () => void; toolbar: HTMLElement | null };
 const noticeKey = 'explainer-video-generation';
+// Above the editor workspace layers, like the editor's own dialogs.
+const editorLayer = 2000;
 
 /** Editor entry ("更多 → 生成本页讲解视频") plus the toolbar shown on video pages. */
 export function ExplainerEditorTools({ projectId, page, dialogOpen, closeDialog, save, deleteCurrent, toolbar }: Props) {
@@ -82,7 +84,7 @@ export function ExplainerEditorTools({ projectId, page, dialogOpen, closeDialog,
 
   return <>
     {bar}
-    <Modal open={dialogOpen} title="🎬 生成本页讲解视频" width={600} onCancel={closeDialog} modalRender={modalFocus} okText="开始生成" cancelText="取消" okButtonProps={{ loading: starting, disabled: state.phase === 'running' }} onOk={start}>
+    <Modal open={dialogOpen} title="🎬 生成本页讲解视频" width={600} zIndex={editorLayer} onCancel={closeDialog} modalRender={modalFocus} okText="开始生成" cancelText="取消" okButtonProps={{ loading: starting, disabled: state.phase === 'running' }} onOk={start}>
       <Typography.Paragraph type="secondary">当前页：第 {page.index + 1} 页 · {page.title || '未命名页面'}。将读取本页内容与已有讲稿扩写讲解稿。</Typography.Paragraph>
       {state.phase === 'running' && <Typography.Paragraph type="warning">已有讲解视频在生成中，请等待完成后再发起。</Typography.Paragraph>}
       <Input.TextArea aria-label="补充讲解方向" autoSize={{ minRows: 2, maxRows: 6 }} value={extra} onChange={event => setExtra(event.target.value)} placeholder="补充讲解方向（选填）" />
@@ -94,6 +96,6 @@ export function ExplainerEditorTools({ projectId, page, dialogOpen, closeDialog,
       ]} />
       {mode !== 'none' && <Typography.Paragraph type="secondary" className="explainer-dialog-label">生成完成后编辑器会自动刷新，生成期间请勿修改本项目。</Typography.Paragraph>}
     </Modal>
-    <ExplainerResultModal videoId={resultId} actions={!page.videoId} onClose={() => setResultId(null)} />
+    <ExplainerResultModal videoId={resultId} zIndex={editorLayer} actions={!page.videoId} onClose={() => setResultId(null)} />
   </>;
 }

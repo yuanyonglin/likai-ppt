@@ -74,7 +74,7 @@ export function SlidePicker({ open, title, sourceMode = false, initialProjectId,
       <Select aria-label="选择项目" className="explainer-picker-project" showSearch optionFilterProp="label" value={projectId || undefined} placeholder="选择项目"
         options={projects.map(item => ({ value: item.project_id, label: item.title || item.topic || item.project_id }))} onChange={setProjectId} />
       {error && <Alert type="error" showIcon title={error} />}
-      {loading ? <div role="status"><Spin size="small" /> 正在读取页面…</div> : !slides.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="这个项目还没有页面" />
+      {loading || !projectId && !error ? <div role="status"><Spin size="small" /> 正在读取页面…</div> : !slides.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="这个项目还没有页面" />
         : <div className="explainer-slide-grid" role="listbox" aria-label="项目页面">{slides.map((slide, index) => {
           const isVideo = !!parseExplainerVideoId(slide.html_content);
           const disabled = sourceMode && isVideo;
@@ -167,10 +167,10 @@ export function ExplainerTrackerView({ state, tracker, title, crumb, onPlaced, a
     extra={state.phase === 'failed' && <Space>{state.videoId && <Button onClick={() => tracker.track(state.videoId)}>重新查询</Button>}{onBack && <Button onClick={onBack}>返回修改</Button>}</Space>} />;
 }
 
-export function ExplainerResultModal({ videoId, onClose, onPlaced, actions }: { videoId: string | null; onClose: () => void; onPlaced?: (projectId: string) => void; actions?: boolean }) {
+export function ExplainerResultModal({ videoId, onClose, onPlaced, actions, zIndex }: { videoId: string | null; onClose: () => void; onPlaced?: (projectId: string) => void; actions?: boolean; zIndex?: number }) {
   const [state, tracker] = useExplainerTracker();
   useEffect(() => { if (videoId) tracker.track(videoId); else tracker.reset(); }, [videoId, tracker]);
-  return <Modal open={!!videoId} title={<Space><VideoCameraOutlined aria-hidden />讲解视频</Space>} width={1100} footer={null} onCancel={onClose} modalRender={modalFocus} destroyOnHidden>
+  return <Modal open={!!videoId} title={<Space><VideoCameraOutlined aria-hidden />讲解视频</Space>} width={1100} zIndex={zIndex} footer={null} onCancel={onClose} modalRender={modalFocus} destroyOnHidden>
     {state.phase !== 'idle' && <ExplainerTrackerView state={state} tracker={tracker} title="讲解视频" onPlaced={onPlaced} actions={actions} />}
   </Modal>;
 }
