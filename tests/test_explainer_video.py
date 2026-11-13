@@ -358,3 +358,27 @@ async def test_upload_sections_by_heading_and_reload(tmp_path, monkeypatch):
         sources.load_upload_section(8, payload["file_id"], 0)  # another user's upload
     with pytest.raises(sources.SourceError):
         await sources.store_upload(7, "a.exe", b"x")
+
+
+@pytest.mark.asyncio
+async def test_ffmpeg_never_reads_terminal(monkeypatch):
+    import asyncio
+
+    from landppt.services.explainer_video import render
+
+    calls = {}
+
+    class Done:
+        returncode = 0
+
+        async def communicate(self):
+            return b"", b""
+
+    async def fake_exec(*args, **kwargs):
+        calls["args"], calls["kwargs"] = args, kwargs
+        return Done()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    await render._ffmpeg("-i", "x")
+    assert calls["args"][:2] == ("ffmpeg", "-nostdin")
+    assert calls["kwargs"]["stdin"] == asyncio.subprocess.DEVNULL

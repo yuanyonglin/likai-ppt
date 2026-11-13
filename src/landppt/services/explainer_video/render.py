@@ -16,8 +16,9 @@ class RenderError(RuntimeError):
 
 async def _ffmpeg(*args: str) -> None:
     process = await asyncio.create_subprocess_exec(
-        "ffmpeg", "-y", "-loglevel", "error", *args,
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        # -nostdin: a background server must never wait on terminal input.
+        "ffmpeg", "-nostdin", "-y", "-loglevel", "error", *args,
+        stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     _, stderr = await process.communicate()
     if process.returncode != 0:
