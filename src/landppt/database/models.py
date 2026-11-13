@@ -533,6 +533,34 @@ class AsyncTask(Base):
     project: Mapped[Optional["Project"]] = relationship("Project")
 
 
+class ExplainerVideo(Base):
+    """A generated explainer video; a slide embeds it via data-explainer-video-id."""
+
+    __tablename__ = "explainer_videos"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # Plain column: project deletion must not be blocked by videos that outlive it.
+    project_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    source_ref: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    options_json: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False, index=True)
+    stage: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    task_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    script_json: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    video_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    cover_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    artifact_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    # {slide_id: {project_id, title, content_type, html_content, slide_metadata}}
+    replaced_slide_backup: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, default=time.time, nullable=False, index=True)
+    updated_at: Mapped[float] = mapped_column(Float, default=time.time, onupdate=time.time, nullable=False)
+
+
 class Notification(Base):
     """In-app notification delivered to a single user."""
 

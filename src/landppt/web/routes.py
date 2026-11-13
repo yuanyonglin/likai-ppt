@@ -11,6 +11,7 @@ from .route_modules.creation_assistant_routes import router as creation_assistan
 from .route_modules.editor_document_routes import router as editor_document_router
 from .route_modules.project_agent_routes import router as project_agent_router
 from .route_modules.export_routes import router as export_router
+from .route_modules.explainer_video_routes import router as explainer_video_router
 from .route_modules.narration_routes import router as narration_router
 from .route_modules.notification_routes import router as notification_router
 from .route_modules.outline_routes import router as outline_router
@@ -33,6 +34,7 @@ router.include_router(share_router)
 router.include_router(narration_router)
 router.include_router(template_router)
 router.include_router(export_router)
+router.include_router(explainer_video_router)
 router.include_router(slide_router)
 router.include_router(ai_edit_router)
 router.include_router(creation_assistant_router)

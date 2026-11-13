@@ -218,6 +218,26 @@ class DatabaseMigration:
             "down": self._migration_022_down,
         })
 
+        self.migrations.append({
+            "version": "023",
+            "name": "add_explainer_videos",
+            "description": "Store generated explainer videos and replaced-slide backups",
+            "up": self._migration_023_up,
+            "down": self._migration_023_down,
+        })
+
+    async def _migration_023_up(self, session: AsyncSession):
+        from .models import ExplainerVideo
+
+        connection = await session.connection()
+        await connection.run_sync(
+            lambda conn: ExplainerVideo.__table__.create(conn, checkfirst=True)
+        )
+
+    async def _migration_023_down(self, session: AsyncSession):
+        # Replaced-slide backups are user content; keep them on code rollback.
+        raise RuntimeError("Migration 023 contains user content; automatic rollback is disabled")
+
     async def _migration_022_up(self, session: AsyncSession):
         from .models import UserAPIKey
 
