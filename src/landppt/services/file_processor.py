@@ -44,6 +44,7 @@ class FileProcessor:
         self.supported_formats = {
             '.pdf': self._process_pdf,
             '.docx': self._process_docx,
+            '.pptx': self._process_pptx,
             '.txt': self._process_txt,
             '.md': self._process_markdown,
             '.jpg': self._process_image,
@@ -103,6 +104,12 @@ class FileProcessor:
             logger.error(f"Error processing file {filename}: {e}")
             raise ValueError(f"文件处理失败: {str(e)}")
     
+    async def _process_pptx(self, file_path: str) -> str:
+        """Slide text in reading order with speaker notes, one heading per slide."""
+        from .source_sections import parse_source_sections, sections_to_text
+
+        return sections_to_text(await parse_source_sections(file_path, "upload.pptx"))
+
     async def _process_docx(self, file_path: str) -> str:
         """Process DOCX file"""
         if not DOCX_AVAILABLE:
