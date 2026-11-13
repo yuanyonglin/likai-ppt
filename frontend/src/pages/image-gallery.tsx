@@ -9,13 +9,15 @@ import ImageUpload from './image-upload';
 import ImageDetail from './image-detail';
 import { ArtifactLibrary } from '../components/artifact-library';
 import { SourceLibrary } from '../components/source-library';
+import { ExplainerVideoLibrary } from '../components/explainer-video';
 
 export default function MaterialLibrary() {
-  const [active, setActive] = useState(() => { const tab = new URLSearchParams(location.search).get('tab'); return tab === 'exports' || tab === 'sources' ? tab : 'images'; });
+  const [active, setActive] = useState(() => { const tab = new URLSearchParams(location.search).get('tab'); return tab === 'exports' || tab === 'sources' || tab === 'explainer' ? tab : 'images'; });
   return <Tabs activeKey={active} onChange={value => { setActive(value); const url = new URL(location.href); if (value !== 'images') url.searchParams.set('tab', value); else url.searchParams.delete('tab'); history.replaceState(history.state, '', url); }} items={[
     { key: 'images', label: '图片素材', children: <ImageGallery /> },
     { key: 'exports', label: '导出文件', children: <ArtifactLibrary active={active === 'exports'} /> },
     { key: 'sources', label: '项目资料', children: <SourceLibrary active={active === 'sources'} /> },
+    { key: 'explainer', label: '🎬 讲解视频', children: <ExplainerVideoLibrary active={active === 'explainer'} /> },
   ]} />;
 }
 

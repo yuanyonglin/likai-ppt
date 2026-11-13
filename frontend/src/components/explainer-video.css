@@ -1,0 +1,46 @@
+/* 讲解视频：layout only; colors come from the shared --lp-* tokens and antd. */
+.create-output-kind { margin-bottom: 12px; }
+.explainer-studio .ant-card-body { display: flex; flex-direction: column; gap: 12px; }
+.explainer-studio-options { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.explainer-studio-options .ant-select { min-width: 140px; }
+.explainer-studio-options .explainer-go { margin-left: auto; }
+.explainer-picked { display: flex; gap: 12px; align-items: center; padding: 8px; border: 1px solid var(--lp-border); border-radius: 10px; }
+.explainer-picked .slide-document { width: 160px; flex: none; border-radius: 6px; }
+.explainer-picked > div:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.explainer-sections { max-height: 280px; overflow: auto; border: 1px solid var(--lp-border); border-radius: 10px; padding: 4px 8px; }
+.explainer-sections .ant-radio-wrapper { display: flex; padding: 6px 4px; }
+
+.explainer-progress .ant-card-body { display: flex; flex-direction: column; gap: 12px; }
+.explainer-progress h4.ant-typography { margin: 0; }
+.explainer-progress-steps { margin: 8px 0; }
+
+.explainer-result { display: flex; flex-direction: column; gap: 8px; }
+.explainer-result h4.ant-typography { margin: 0; }
+.explainer-result-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr); gap: 16px; margin-top: 8px; }
+.explainer-player { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 10px; display: block; }
+.explainer-result-actions { margin-top: 12px; }
+.explainer-segments { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; width: 100%; max-height: 460px; overflow: auto; }
+.explainer-segment { all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 8px 10px; border: 1px solid var(--lp-border); border-radius: 8px; cursor: pointer; line-height: 1.6; }
+.explainer-segment:hover, .explainer-segment:focus-visible { border-color: var(--lp-primary); }
+@media (max-width: 900px) { .explainer-result-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.explainer-picker { width: 100%; }
+.explainer-picker-project { width: 320px; max-width: 100%; }
+.explainer-slide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; max-height: 60vh; overflow: auto; padding: 2px; }
+.explainer-slide { all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; padding: 6px; border: 2px solid transparent; border-radius: 10px; cursor: pointer; font-size: 13px; }
+.explainer-slide:hover, .explainer-slide:focus-visible { border-color: var(--lp-border); }
+.explainer-slide.is-selected { border-color: var(--lp-primary); }
+.explainer-slide:disabled { cursor: not-allowed; opacity: .5; }
+.explainer-slide .slide-document { border-radius: 6px; }
+.explainer-place-options { display: flex; flex-direction: column; gap: 12px; }
+.explainer-place-options .ant-typography { margin: 4px 0 0; }
+
+.explainer-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.explainer-library-grid video, .explainer-library-pending { width: 100%; aspect-ratio: 16 / 9; background: #000; display: block; }
+.explainer-library-pending { display: flex; align-items: center; justify-content: center; gap: 6px; color: #fff; }
+.explainer-library-grid .ant-typography { margin-bottom: 4px; }
+.explainer-library-actions { margin-top: 8px; }
+
+.explainer-video-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 0; }
+.explainer-video-bar .explainer-video-bar-spacer { flex: 1; }
+.explainer-dialog-label { margin: 12px 0 6px; }

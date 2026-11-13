@@ -15,6 +15,12 @@ const narrationVideoToolsEnabled = !!window.landpptEditorConfig.narrationVideoTo
 let slidesData = JSON.parse(document.getElementById('projectSlidesScript').textContent).slides;
 window.slidesData = slidesData;
 
+// 讲解视频页的唯一识别依据是 HTML 上的 data-explainer-video-id（见 EXPLAINER_VIDEO_CONTRACT.md）
+function explainerVideoId(html) {
+    const match = typeof html === 'string' ? /data-explainer-video-id\s*=\s*["']([^"']+)["']/.exec(html) : null;
+    return match ? match[1] : null;
+}
+
 // SVG 页面使用专用的坐标编辑器；旧版 HTML 专属工具仍提示切换入口。
 function isSvgRenderedSlide(slide) {
     if (!slide) return false;
