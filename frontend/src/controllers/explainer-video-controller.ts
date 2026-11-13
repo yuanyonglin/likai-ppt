@@ -7,6 +7,7 @@ export type ExplainerPlacement = { project_id: string; slide_id: string; mode: '
 export type ExplainerVideo = {
   id: string; status: string; error?: string | null; title: string; source_type: 'slide' | 'upload' | 'text'; source_ref: Json;
   script?: ExplainerScript | null; video_url?: string; cover_url?: string; duration_ms?: number | null; placements?: ExplainerPlacement[]; stage?: string;
+  progress?: number; created_at?: number; updated_at?: number;
 };
 export type ExplainerSource = { type: 'slide'; project_id: string; slide_id: string } | { type: 'upload'; file_id: string; section_index: number } | { type: 'text'; title: string; text: string };
 export type ExplainerOptions = { duration: '1m' | '2m' | '3m'; tts_provider: string; voice: string | null; style: 'follow_ppt' | 'business_blue' | 'dark_tech'; subtitles: boolean };
@@ -29,6 +30,21 @@ export function parseExplainerVideoId(html: unknown): string | null {
 }
 export const explainerVideoFile = (id: string) => `/api/explainer-videos/${encodeURIComponent(id)}/video.mp4`;
 export const explainerCoverFile = (id: string) => `/api/explainer-videos/${encodeURIComponent(id)}/cover.png`;
+/** Home page studio opened on one video's progress or result (same link the notification uses). */
+export const explainerResultURL = (id: string) => `/dashboard?kind=video&explainer=${encodeURIComponent(id)}`;
+export const isExplainerRunning = (video: ExplainerVideo) => video.status === 'pending' || video.status === 'running';
+/**
+ * Videos for the home page task list: still generating, or finished in the last day.
+ * A run interrupted by a restart stays "running" in the database; after 30 minutes
+ * without a stage update it is no longer shown as in progress.
+ */
+export function recentExplainerVideos(videos: ExplainerVideo[], nowSeconds = Date.now() / 1000, limit = 3) {
+  const age = (video: ExplainerVideo) => nowSeconds - Number(video.updated_at || video.created_at || 0);
+  return videos
+    .filter(video => isExplainerRunning(video) ? age(video) < 30 * 60 : (video.status === 'completed' || video.status === 'failed') && age(video) < 24 * 3600)
+    .sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))
+    .slice(0, limit);
+}
 export const stageIndex = (stage: unknown) => explainerStages.findIndex(([key]) => key === stage);
 export function formatClock(seconds: number) {
   const value = Math.max(0, Math.floor(Number(seconds) || 0));

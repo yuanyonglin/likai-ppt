@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildCreateBody, createExplainerApi, createExplainerTracker, formatClock, parseExplainerVideoId,
+  buildCreateBody, createExplainerApi, createExplainerTracker, explainerResultURL, formatClock, parseExplainerVideoId,
+  recentExplainerVideos,
   placementLabel, placementOf, segmentStarts, sourceLabel, stageIndex, ttsChoices,
 } from '../src/controllers/explainer-video-controller.ts';
 
@@ -143,4 +144,20 @@ test('a newer run cancels the previous poll loop', async t => {
   const settled = polls; await sleep(10);
   assert.equal(polls, settled);
   assert.equal(tracker.getSnapshot().video.id, 'new');
+});
+
+test('home page lists running videos and ones finished within a day, newest first', () => {
+  const now = 1_000_000;
+  const row = (id, status, created, updated = created) => ({ id, status, title: id, source_type: 'text', source_ref: {}, created_at: created, updated_at: updated });
+  const list = [
+    row('old-done', 'completed', now - 2 * 86400),
+    row('done', 'completed', now - 600),
+    row('failed', 'failed', now - 300),
+    row('running', 'running', now - 60, now - 10),
+    row('stuck', 'running', now - 7200, now - 3600), // interrupted by a restart
+    row('pending', 'pending', now - 5),
+  ];
+  assert.deepEqual(recentExplainerVideos(list, now).map(video => video.id), ['pending', 'running', 'failed']);
+  assert.deepEqual(recentExplainerVideos(list, now, 10).map(video => video.id), ['pending', 'running', 'failed', 'done']);
+  assert.equal(explainerResultURL('a b'), '/dashboard?kind=video&explainer=a%20b');
 });

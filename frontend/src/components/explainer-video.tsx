@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, App, Button, Card, Empty, Flex, Input, Modal, Progress, Radio, Select, Space, Spin, Steps, Tag, Typography } from 'antd';
-import { DownloadOutlined, EditOutlined, LoadingOutlined, PlusSquareOutlined, PushpinOutlined, ReloadOutlined, VideoCameraOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, CloseCircleFilled, DownloadOutlined, EditOutlined, LoadingOutlined, PlusSquareOutlined, PushpinOutlined, ReloadOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import { request, type ApiData } from '../api';
 import { modalFocus } from './modal-focus';
 import { SlideDocument } from './slide-document';
 import {
-  createExplainerApi, createExplainerTracker, explainerCoverFile, explainerStages, explainerVideoFile, formatClock, parseExplainerVideoId,
+  createExplainerApi, createExplainerTracker, explainerCoverFile, explainerResultURL, explainerStages, explainerVideoFile, formatClock, isExplainerRunning, parseExplainerVideoId,
+  recentExplainerVideos,
   placementLabel, segmentStarts, sourceLabel, stageIndex, type ExplainerSegment, type ExplainerTracker, type ExplainerVideo, type TrackerState,
 } from '../controllers/explainer-video-controller';
 import './explainer-video.css';
@@ -28,7 +29,7 @@ export function ExplainerProgress({ state, title, crumb, extra }: { state: Track
   return <Card className="explainer-progress" size="small">
     {crumb && <Typography.Text type="secondary">{crumb}</Typography.Text>}
     <Typography.Title level={4}>{failed ? '讲解视频生成失败' : `正在生成讲解视频：${title}`}</Typography.Title>
-    <Typography.Text type="secondary">后台任务，可以离开本页；完成后会出现在「素材 · 讲解视频」。</Typography.Text>
+    <Typography.Text type="secondary">后台生成，可以离开本页；完成后会在首页和右上角通知里提醒你。</Typography.Text>
     <Steps className="explainer-progress-steps" size="small" responsive={false} current={current} status={failed ? 'error' : 'process'} items={explainerStages.map(([, label]) => ({ title: label }))} />
     {failed ? <Alert type="error" showIcon title={state.error} action={extra} />
       : <section aria-label="讲解视频生成进度"><Flex justify="space-between"><span role="status" aria-live="polite">{state.message || `${explainerStages[current][1]}…`}</span><strong>{state.percent ? `${state.percent}%` : <LoadingOutlined spin aria-hidden />}</strong></Flex>
@@ -134,6 +135,8 @@ export function ExplainerResult({ state, tracker, onPlaced, actions = true }: { 
   return <div className="explainer-result">
     <Flex align="center" gap={8} wrap><Typography.Title level={4}>{video.title}</Typography.Title><Tag>已完成{video.duration_ms ? ` · ${formatClock(video.duration_ms / 1000)}` : ''}</Tag><Tag color={video.placements?.length ? 'green' : 'blue'}>{placementLabel(video)}</Tag></Flex>
     <Typography.Text type="secondary">{sourceLabel(video)}</Typography.Text>
+    <Alert className="explainer-result-success" type="success" showIcon title="讲解视频已生成"
+      description={fromSlide ? '可以直接播放，下载 MP4，或加入 PPT。' : '可以直接播放，下载 MP4，或插入到某个项目。'} />
     <div className="explainer-result-grid">
       <div>
         <video ref={player} className="explainer-player" src={videoUrl(video)} poster={coverUrl(video)} controls playsInline preload="metadata" aria-label="讲解视频播放器" />
@@ -158,6 +161,56 @@ export function ExplainerResult({ state, tracker, onPlaced, actions = true }: { 
     {fromSlide && placing && <PlaceDialog open video={video} target={{ project_id: ref.project_id, slide_id: ref.slide_id, label: [ref.project_title, ref.slide_title].filter(Boolean).join(' · ') }} onCancel={() => setPlacing(false)} onPlaced={projectId => { setPlacing(false); placed(projectId); }} />}
     {inserting && <InsertIntoProject open video={video} onClose={() => setInserting(false)} onPlaced={placed} />}
   </div>;
+}
+
+/**
+ * Home page list of recent explainer videos. Polls the running ones and announces
+ * the moment one finishes, so leaving the studio page never hides the result.
+ */
+export function useRecentExplainerVideos() {
+  const { message } = App.useApp();
+  const [videos, setVideos] = useState<ExplainerVideo[]>([]);
+  const running = videos.filter(isExplainerRunning).map(video => video.id).join(',');
+  useEffect(() => {
+    const controller = new AbortController();
+    explainerApi.list(undefined, controller.signal).then(list => setVideos(recentExplainerVideos(list))).catch(() => { /* The task list is optional on the home page. */ });
+    return () => controller.abort();
+  }, []);
+  useEffect(() => {
+    if (!running) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      const ids = running.split(',');
+      const fresh = await Promise.all(ids.map(id => explainerApi.get(id, controller.signal).catch(() => null)));
+      if (controller.signal.aborted) return;
+      for (const video of fresh) {
+        if (video?.status === 'completed') message.success({ content: `讲解视频已生成：${video.title || '讲解视频'}`, duration: 6 });
+        if (video?.status === 'failed') message.error({ content: `讲解视频生成失败：${video.title || '讲解视频'}`, duration: 6 });
+      }
+      setVideos(current => current.map(item => fresh.find(video => video?.id === item.id) || item));
+    }, 3000);
+    return () => { controller.abort(); clearTimeout(timer); };
+  }, [running, videos, message]);
+  return videos;
+}
+
+export function DashboardExplainerTasks({ videos }: { videos: ExplainerVideo[] }) {
+  return <>
+    <div className="section-heading"><h2 id="dashboardVideosTitle">讲解视频</h2><Button type="text" size="small" href="/image-gallery?tab=explainer">全部</Button></div>
+    <div className="dashboard-task-list" aria-labelledby="dashboardVideosTitle">{videos.map(video => {
+      const href = explainerResultURL(video.id);
+      const title = video.title || '讲解视频';
+      if (isExplainerRunning(video)) {
+        const index = Math.max(0, stageIndex(video.stage));
+        return <article key={video.id}><a className="dashboard-task-title" href={href}>{title}</a><Progress percent={video.progress || 0} strokeColor="var(--lp-primary)" />
+          <p className="subtle">生成中：{explainerStages[index][1]}</p><Button href={href} icon={<LoadingOutlined aria-hidden />}>查看进度</Button></article>;
+      }
+      const done = video.status === 'completed';
+      return <article key={video.id} className={done ? 'dashboard-video-done' : 'dashboard-video-failed'}><a className="dashboard-task-title" href={href}>{title}</a>
+        <p className={done ? 'dashboard-video-status is-done' : 'dashboard-video-status is-failed'}>{done ? <CheckCircleFilled aria-hidden /> : <CloseCircleFilled aria-hidden />}{done ? `已生成${video.duration_ms ? ` · ${formatClock(video.duration_ms / 1000)}` : ''}` : '生成失败'}</p>
+        <Button type={done ? 'primary' : 'default'} href={href} icon={done ? <VideoCameraOutlined aria-hidden /> : undefined}>{done ? '查看视频' : '查看原因'}</Button></article>;
+    })}</div>
+  </>;
 }
 
 /** Tracker-backed view used by the composer, the editor and the library. */
