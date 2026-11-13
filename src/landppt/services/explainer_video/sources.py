@@ -78,86 +78,16 @@ def _upload_dir(user_id: int, file_id: str) -> Path:
     return UPLOADS_ROOT / str(int(user_id)) / file_id
 
 
-def _clean_markdown(text: str) -> str:
-    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text or "")
-    return re.sub(r"\n{3,}", "\n\n", text).strip()
-
-
-def _first_heading(text: str) -> str:
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            return stripped.lstrip("#").strip()
-        if stripped:
-            return stripped[:40]
-    return ""
-
-
-def _split_by_headings(markdown: str, max_chars: int = 3000) -> List[Dict[str, str]]:
-    blocks: List[List[str]] = [[]]
-    for line in (markdown or "").splitlines():
-        if re.match(r"^#{1,2}\s+\S", line) and any(item.strip() for item in blocks[-1]):
-            blocks.append([])
-        blocks[-1].append(line)
-    sections: List[Dict[str, str]] = []
-    for block in blocks:
-        text = _clean_markdown("\n".join(block))
-        if not text:
-            continue
-        # Headingless documents still need pieces short enough to explain in minutes.
-        for start in range(0, len(text), max_chars):
-            piece = text[start:start + max_chars]
-            sections.append({"title": _first_heading(piece) or f"第{len(sections) + 1}节", "text": piece})
-    return sections
-
-
-def _parse_pptx(path: Path) -> List[Dict[str, str]]:
-    from markitdown import MarkItDown
-
-    markdown = MarkItDown().convert(str(path)).text_content or ""
-    parts = re.split(r"<!--\s*Slide number:\s*(\d+)\s*-->", markdown)
-    sections = []
-    for number, body in zip(parts[1::2], parts[2::2]):
-        text = _clean_markdown(body)
-        sections.append({"title": _first_heading(text) or f"第{number}页", "text": text})
-    return sections
-
-
-def _parse_pdf(path: Path) -> List[Dict[str, str]]:
-    import fitz
-
-    sections = []
-    with fitz.open(str(path)) as document:
-        for number, page in enumerate(document, start=1):
-            text = re.sub(r"[ \t]+", " ", page.get_text("text") or "").strip()
-            sections.append({"title": _first_heading(text) or f"第{number}页", "text": text})
-    return sections
-
-
 async def parse_upload_sections(path: Path, filename: str) -> List[Dict[str, Any]]:
-    # After the PPTX-parsing branch merges, replace the per-format branches below with
-    # ``await landppt.services.source_sections.parse_source_sections(str(path), filename)``
-    # (same {index, title, text} shape) and keep the empty-text filter.
-    ext = Path(filename).suffix.lower()
-    if ext == ".pptx":
-        from ...utils.thread_pool import run_blocking_io
+    from ..source_sections import parse_source_sections
 
-        sections = await run_blocking_io(_parse_pptx, path)
-    elif ext == ".pdf":
-        from ...utils.thread_pool import run_blocking_io
-
-        sections = await run_blocking_io(_parse_pdf, path)
-    elif ext in {".docx", ".md", ".txt"}:
-        from ..file_processor import FileProcessor
-
-        result = await FileProcessor().process_file(str(path), filename)
-        sections = _split_by_headings(result.processed_content)
-    else:
-        raise SourceError(f"不支持的文件格式：{ext or '(无扩展名)'}")
-    sections = [section for section in sections if section["text"].strip()]
+    sections = await parse_source_sections(str(path), filename)
+    for section in sections:  # image links are noise for narration
+        section["text"] = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", section["text"]).strip()
+    sections = [section for section in sections if section["text"]]
     if not sections:
         raise SourceError("文件中没有可讲解的文字内容")
-    return [{"index": index, **section} for index, section in enumerate(sections)]
+    return [{**section, "index": index} for index, section in enumerate(sections)]
 
 
 async def store_upload(user_id: int, filename: str, data: bytes) -> Dict[str, Any]:

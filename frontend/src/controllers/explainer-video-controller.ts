@@ -20,7 +20,7 @@ export const explainerUploadExtensions = ['pdf', 'docx', 'pptx', 'txt', 'md'];
 export const explainerDurations = [['1m', '约 1 分钟'], ['2m', '约 2 分钟'], ['3m', '约 3 分钟']] as const;
 export const explainerStyles = [['follow_ppt', '画面跟随 PPT 风格'], ['business_blue', '简洁商务蓝'], ['dark_tech', '深色科技']] as const;
 // Same providers as the editor narration dialog, minus ComfyUI (needs a reference upload).
-const ttsProviders = ['edge_tts', 'cloud_tts', 'xiaomimimo', 'custom_tts_api'];
+const ttsProviders = ['auto', 'cloud_tts', 'edge_tts', 'custom_tts_api'];
 
 /** The only reliable marker of a video page (contract §1). */
 export function parseExplainerVideoId(html: unknown): string | null {
@@ -47,11 +47,10 @@ export function ttsChoices(config: Json = {}) {
   const labels: Record<string, string> = {
     edge_tts: `Edge-TTS${config.tts_voice_zh ? ' · ' + config.tts_voice_zh : ''}`,
     cloud_tts: `云端语音${config.cloud_tts_voice ? ' · ' + config.cloud_tts_voice : ''}`,
-    xiaomimimo: 'Xiaomi Mimo · 声音设计',
+    auto: '自动（已配置云端语音则用云端，否则 Edge-TTS）',
     custom_tts_api: `自定义 TTS${config.custom_tts_api_speaker ? ' · ' + config.custom_tts_api_speaker : ''}`,
   };
-  const preferred = ttsProviders.includes(config.unattended_tts_provider) ? config.unattended_tts_provider : 'edge_tts';
-  return { value: preferred as string, options: ttsProviders.map(value => ({ value, label: labels[value] })) };
+  return { value: 'auto', options: ttsProviders.map(value => ({ value, label: labels[value] })) };
 }
 export function placementOf(video: Pick<ExplainerVideo, 'placements'> | null | undefined, projectId: string, slideId: string | null | undefined) {
   return video?.placements?.find(item => item.project_id === projectId && item.slide_id === slideId) || null;

@@ -183,6 +183,7 @@ def _build_export_app_url(base_url: str, relative_path: str) -> str:
 
 _APP_EXPORTABLE_PATH_PREFIXES = (
     "/api/image/view/",
+    "/api/explainer-videos/",
     "/api/image/thumbnail/",
     "/static/",
     "/temp/",

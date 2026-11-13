@@ -18,6 +18,7 @@ from ..url_service import get_current_base_url
 
 _APP_EXPORTABLE_PATH_PREFIXES = (
     "/api/image/view/",
+    "/api/explainer-videos/",
     "/api/image/thumbnail/",
     "/static/",
     "/temp/",

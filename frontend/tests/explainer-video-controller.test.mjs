@@ -41,10 +41,9 @@ test('helpers format segments, stages, voices and placements', () => {
   assert.equal(formatClock(72.6), '1:12');
   assert.equal(stageIndex('tts'), 2); assert.equal(stageIndex('unknown'), -1);
   const voices = ttsChoices({ unattended_tts_provider: 'cloud_tts', cloud_tts_voice: 'male-qn-jingying' });
-  assert.equal(voices.value, 'cloud_tts');
+  assert.equal(voices.value, 'auto');
   assert.ok(voices.options.some(item => item.label === '云端语音 · male-qn-jingying'));
-  assert.ok(!voices.options.some(item => item.value === 'comfyuiapi'));
-  assert.equal(ttsChoices({ unattended_tts_provider: 'comfyuiapi' }).value, 'edge_tts');
+  assert.deepEqual(voices.options.map(item => item.value), ['auto', 'cloud_tts', 'edge_tts', 'custom_tts_api']);
   const placed = video({ placements: [{ project_id: 'p1', slide_id: 's8', mode: 'replace' }] });
   assert.equal(placementOf(placed, 'p1', 's8').mode, 'replace');
   assert.equal(placementOf(placed, 'p1', 's9'), null);
