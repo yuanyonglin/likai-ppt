@@ -87,7 +87,7 @@ async def test_api_key_migration_preserves_legacy_rows_and_enforces_uniqueness(
                 )
                 await session.commit()
             migrations = DatabaseMigration()
-            assert "022" in [m["version"] for m in migrations.migrations]
+            assert migrations.migrations[-1]["version"] == "023"
             await migrations._migration_022_up(session)
             await session.commit()
             await migrations._migration_022_up(session)
