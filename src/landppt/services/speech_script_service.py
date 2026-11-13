@@ -16,6 +16,7 @@ from ..core.config import ai_config
 from ..api.models import PPTProject
 from .prompts.system_prompts import SystemPrompts
 from .progress_tracker import progress_tracker
+from .explainer_video.page import parse_explainer_video_id
 from .runtime.ai_execution import scoped_ai_conversation
 
 logger = logging.getLogger(__name__)
@@ -453,6 +454,7 @@ class SpeechScriptService:
             successful_scripts = []
             failed_slides = []
             skipped_slides = []
+            video_page_count = 0
             existing_script_contexts = await self._load_existing_script_contexts(
                 project.project_id,
                 customization.language,
@@ -497,6 +499,14 @@ class SpeechScriptService:
 
                 slide = project.slides_data[slide_index]
                 slide_title = slide.get('title', f'第{slide_index + 1}页')
+
+                if parse_explainer_video_id(slide.get('html_content') or ''):
+                    # Explainer video pages carry their own narration; keep indices unchanged.
+                    video_page_count += 1
+                    await progress_tracker.add_slide_skipped_async(
+                        task_id, slide_index, slide_title, '讲解视频页无需演讲稿'
+                    )
+                    continue
 
                 # Update progress
                 await progress_tracker.update_progress_async(
@@ -640,7 +650,9 @@ class SpeechScriptService:
             success = len(successful_scripts) > 0
             error_message = None
 
-            if len(failed_slides) > 0 or len(skipped_slides) > 0:
+            if not success and video_page_count and video_page_count == total_slides:
+                error_message = "所选页面均为讲解视频页，无需生成演讲稿"
+            elif len(failed_slides) > 0 or len(skipped_slides) > 0:
                 error_parts = []
                 if failed_slides:
                     error_parts.append(f"{len(failed_slides)}页生成失败")

@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 import time
 
+from .export_infra.explainer_video_assets import swap_video_page_for_cover
+
 try:
     from playwright.async_api import async_playwright, Browser, Page, BrowserContext
     PLAYWRIGHT_AVAILABLE = True
@@ -2085,6 +2087,7 @@ class PlaywrightPDFConverter:
         if not os.path.exists(html_file_path):
             logger.error(f"❌ Error: HTML file not found at {html_file_path}")
             return False
+        html_file_path = swap_video_page_for_cover(html_file_path)
 
         if options is None:
             options = {}
@@ -2401,6 +2404,7 @@ class PlaywrightPDFConverter:
                     pdf_file = os.path.join(output_dir, f"{base_name}.pdf")
 
                     logger.info(f"📄 Converting {global_index + 1}/{total_files}: {html_file}")
+                    html_file = swap_video_page_for_cover(html_file)
                     
                     # Report progress if callback is provided
                     if progress_callback:
@@ -2607,6 +2611,7 @@ class PlaywrightPDFConverter:
         if not os.path.exists(html_file_path):
             logger.error(f"❌ HTML file not found: {html_file_path}")
             return False
+        html_file_path = swap_video_page_for_cover(html_file_path)
 
         page = None
         try:

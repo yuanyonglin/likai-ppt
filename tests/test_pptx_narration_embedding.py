@@ -301,7 +301,7 @@ async def test_inline_screenshot_failure_preserves_original_notes_audio_and_stat
     assert result["success"]
     assert result["skipped_audio_slides"] == [indices[3] + 1]
     exports._embed_narration_audio.assert_awaited_once()
-    assert exports._embed_narration_audio.await_args.kwargs == {"slide_indices": [indices[0], indices[2], indices[3]]}
+    assert exports._embed_narration_audio.await_args.kwargs["slide_indices"] == [indices[0], indices[2], indices[3]]
     prs = Presentation(result["pptx_path"])
     assert [s.notes_slide.notes_text_frame.text for s in prs.slides] == [f"notes-{i}" for i in [indices[0], indices[2], indices[3]]]
     with ZipFile(result["pptx_path"]) as z:
@@ -343,3 +343,105 @@ async def test_inline_standard_export_embeds_audio_without_scripts(exports, inli
     assert result["skipped_audio_slides"] == [2]
     with ZipFile(result["pptx_path"]) as z:
         _assert_audio(z, 1, 0, 3210)
+
+
+# --- explainer video pages ---------------------------------------------------------------
+
+VIDEO_PAGE = '<div class="explainer-video-page" data-explainer-video-id="v1"><video src="/api/explainer-videos/v1/video.mp4"></video></div>'
+
+
+@pytest.fixture
+def explainer_video(tmp_path, monkeypatch):
+    from landppt.services.export_infra import explainer_video_assets
+
+    video, cover = tmp_path / "explainer.mp4", tmp_path / "cover.png"
+    video.write_bytes(b"\x00\x00\x00\x18ftypmp42-explainer")
+    Image.new("RGB", (192, 108), (200, 0, 0)).save(cover)
+    monkeypatch.setattr(explainer_video_assets, "_query_video_files", {"v1": (str(video), str(cover))}.get)
+    return video, cover
+
+
+def _assert_video(zip_file, page, video_bytes, slide_size):
+    xml = etree.fromstring(zip_file.read(f"ppt/slides/slide{page}.xml"))
+    rels = etree.fromstring(zip_file.read(f"ppt/slides/_rels/slide{page}.xml.rels"))
+    video_rid = xml.xpath(".//a:videoFile/@r:link", namespaces=NS)[0]
+    media_rid = xml.xpath(".//p14:media/@r:embed", namespaces=NS)[0]
+    poster_rid = xml.xpath(".//p:pic/p:blipFill/a:blip/@r:embed", namespaces=NS)[0]
+    video_rel, media_rel = rels.xpath(f'//*[@Id="{video_rid}"]')[0], rels.xpath(f'//*[@Id="{media_rid}"]')[0]
+    assert video_rel.get("Type") == RT.VIDEO and media_rel.get("Type") == RT.MEDIA
+    assert video_rel.get("Target") == media_rel.get("Target")
+    assert zip_file.read("ppt/" + video_rel.get("Target").removeprefix("../")) == video_bytes
+    assert rels.xpath(f'//*[@Id="{poster_rid}"]')[0].get("Type") == RT.IMAGE
+    ext = xml.xpath(".//p:pic/p:spPr/a:xfrm/a:ext", namespaces=NS)[0]
+    assert (int(ext.get("cx")), int(ext.get("cy"))) == slide_size
+    assert not xml.xpath(".//p:audio | .//a:audioFile", namespaces=NS)
+    assert not xml.xpath("./p:transition/@advTm", namespaces=NS)
+    types = etree.fromstring(zip_file.read("[Content_Types].xml"))
+    assert types.xpath('//*[@Extension="mp4"][@ContentType="video/mp4"]')
+
+
+@pytest.mark.asyncio
+async def test_embed_replaces_audio_with_explainer_video_on_video_pages(exports, tmp_path, explainer_video):
+    # Stale narration cached on the video page index must not be embedded.
+    _audios(exports, tmp_path, {0: 1000, 1: 1111, 2: 2000})
+    prs = _presentation(3)
+    slides = [{"html_content": "a"}, {"html_content": VIDEO_PAGE}, {"html_content": "c"}]
+    assert await exports._embed_narration_audio(prs, "project", slides_data=slides) == []
+    output = BytesIO()
+    prs.save(output)
+    with ZipFile(output) as z:
+        _assert_audio(z, 1, 0, 1000)
+        _assert_video(z, 2, explainer_video[0].read_bytes(), (prs.slide_width, prs.slide_height))
+        _assert_audio(z, 3, 2, 2000)
+
+
+@pytest.mark.asyncio
+async def test_screenshot_export_embeds_explainer_video_by_project_index(exports, tmp_path, explainer_video):
+    _audios(exports, tmp_path, {0: 1000})
+    task, captured = _task_setup(exports)
+    exports._project_for_task.return_value.slides_data = [{"html_content": "a"}, {"html_content": VIDEO_PAGE}]
+    task.metadata["slides"] = [{"index": 0, "html_content": "a"}, {"index": 1, "html_content": VIDEO_PAGE}]
+    exports.SpeechScriptRepository = lambda: SimpleNamespace(
+        get_current_speech_scripts_by_project=AsyncMock(return_value=[]), close=lambda: None,
+    )
+
+    async def screenshot(html, png, **kwargs):
+        Image.new("RGB", (16, 9)).save(png)
+        return True
+
+    exports.get_pdf_converter = lambda: SimpleNamespace(is_available=lambda: True, screenshot_html=screenshot)
+    result = await exports.export_html_screenshot_pptx(task)
+    assert result["success"] and result["skipped_audio_slides"] == []
+    prs = Presentation(BytesIO(captured[0]))
+    with ZipFile(BytesIO(captured[0])) as z:
+        _assert_audio(z, 1, 0, 1000)
+        _assert_video(z, 2, explainer_video[0].read_bytes(), (prs.slide_width, prs.slide_height))
+
+
+@pytest.mark.asyncio
+async def test_inline_standard_export_embeds_explainer_video(exports, inline_routes, tmp_path, explainer_video):
+    routes, manager = inline_routes
+    routes.ppt_service.project_manager.get_project.return_value.slides_data = [
+        {"html_content": "a"}, {"html_content": VIDEO_PAGE},
+    ]
+    _audios(exports, tmp_path, {0: 3210})
+    sys.modules["landppt.services.speech_script_repository"].SpeechScriptRepository = lambda: SimpleNamespace(
+        get_current_speech_scripts_by_project=AsyncMock(return_value=[]), close=lambda: None,
+    )
+    routes.get_pdf_converter = lambda: SimpleNamespace(is_available=lambda: True)
+
+    async def convert(pdf, pptx):
+        _presentation(2).save(pptx)
+        return True, "ok"
+
+    routes.get_pdf_to_pptx_converter = lambda: SimpleNamespace(
+        is_available=lambda: True, set_user_id_async=AsyncMock(), convert_pdf_to_pptx_async=convert,
+    )
+    routes._generate_pdf_with_pyppeteer = AsyncMock(return_value=True)
+    await routes.export_project_pptx("project", user=SimpleNamespace(id=1))
+    result = await manager.callback()
+    assert result["success"] and result["skipped_audio_slides"] == []
+    prs = Presentation(result["pptx_path"])
+    with ZipFile(result["pptx_path"]) as z:
+        _assert_audio(z, 1, 0, 3210)
+        _assert_video(z, 2, explainer_video[0].read_bytes(), (prs.slide_width, prs.slide_height))

@@ -37,6 +37,7 @@ from .export_infra.subtitle_mux_service import (
     normalize_audio_cache_path as _normalize_audio_cache_path_impl,
     resolve_subtitle_style as _resolve_subtitle_style_impl,
 )
+from .export_infra.explainer_video_assets import explainer_video_pages
 from .export_infra.temp_artifact_manager import TempArtifactManager
 from .subtitle_service import SubtitleCue, build_slide_cues, build_srt
 from .pyppeteer_pdf_converter import get_pdf_converter
@@ -309,6 +310,116 @@ def _wrap_html_if_needed(html: str, *, title: str) -> str:
 """
 
 
+async def _probe_audio_format(path: str) -> Tuple[int, int]:
+    """Return (sample_rate, channels) of the first audio stream."""
+    code, out, err = await _run_subprocess(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=sample_rate,channels",
+            "-of",
+            "csv=p=0",
+            path,
+        ]
+    )
+    if code != 0 or not out.strip():
+        raise RuntimeError(f"ffprobe audio format failed for {path}: {(err or '').strip()}")
+    sample_rate, channels = out.strip().splitlines()[0].split(",")[:2]
+    return int(sample_rate), int(channels)
+
+
+def _explainer_video_segment_args(
+    video_path: str,
+    out_path: str,
+    *,
+    fps: int,
+    width: int,
+    height: int,
+    duration_ms: int,
+    audio_format: Optional[Tuple[int, int]] = None,
+) -> List[str]:
+    """Re-encode an explainer video page so it concatenates with rendered slide segments.
+
+    Without ``audio_format`` the segment is video-only (live mode muxes audio later);
+    with it the original sound is kept as AAC at that sample rate/channel count.
+    """
+    vf = (
+        f"fps={fps},scale={width}:{height}:force_original_aspect_ratio=decrease,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1"
+    )
+    args = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        video_path,
+        "-t",
+        f"{max(0.1, duration_ms / 1000.0):.3f}",
+        "-vf",
+        vf,
+        "-r",
+        str(fps),
+        "-c:v",
+        "libx264",
+        "-threads",
+        (os.environ.get("LANDPPT_X264_THREADS") or "2"),
+        "-preset",
+        os.environ.get("LANDPPT_X264_PRESET", "ultrafast"),
+        "-crf",
+        os.environ.get("LANDPPT_X264_CRF", "23"),
+        "-pix_fmt",
+        "yuv420p",
+    ]
+    if audio_format is None:
+        args.append("-an")
+    else:
+        sample_rate, channels = audio_format
+        args.extend(
+            ["-af", "apad", "-c:a", "aac", "-b:a", "192k", "-ar", str(sample_rate), "-ac", str(channels)]
+        )
+    args.extend(["-movflags", "+faststart", out_path])
+    return args
+
+
+def _concat_audio_with_video_pages_args(
+    audio_paths: List[str], durations_ms: List[int], out_path: str
+) -> List[str]:
+    """Decode-and-concat slide audio (narration files and explainer MP4 sound) to exact slide durations."""
+    inputs: List[str] = []
+    chains: List[str] = []
+    for i, (path, duration_ms) in enumerate(zip(audio_paths, durations_ms)):
+        inputs.extend(["-i", str(Path(path).resolve())])
+        chains.append(
+            f"[{i}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+            f"apad,atrim=duration={duration_ms / 1000.0:.3f},asetpts=PTS-STARTPTS[a{i}]"
+        )
+    labels = "".join(f"[a{i}]" for i in range(len(audio_paths)))
+    chains.append(f"{labels}concat=n={len(audio_paths)}:v=0:a=1[aout]")
+    return [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        *inputs,
+        "-filter_complex",
+        ";".join(chains),
+        "-map",
+        "[aout]",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        out_path,
+    ]
+
+
 class NarrationVideoExportService:
     @staticmethod
     def _get_html_render_service() -> HtmlRenderService:
@@ -440,11 +551,21 @@ class NarrationVideoExportService:
                 uploads_dir=uploads_dir,
             )
             audio_by_index = {a.slide_index: a for a in audios}
+            video_pages = explainer_video_pages(project.slides_data)
 
             slide_count = len(project.slides_data)
             audio_paths: List[str] = []
             durations_ms: List[int] = []
             for i in range(slide_count):
+                if i in video_pages:
+                    # Explainer video pages play their own MP4 with its original sound.
+                    video_path = str(video_pages[i].video_path)
+                    duration_ms = int(await ffprobe_duration_ms(video_path) or 0)
+                    if duration_ms <= 0:
+                        return {"success": False, "error": f"Cannot determine explainer video duration for slide {i+1}"}
+                    audio_paths.append(video_path)
+                    durations_ms.append(duration_ms)
+                    continue
                 audio = audio_by_index.get(i)
                 if not audio or not audio.audio_path or not os.path.exists(audio.audio_path):
                     return {"success": False, "error": f"Missing narration audio for slide {i+1} (language={language})"}
@@ -470,6 +591,9 @@ class NarrationVideoExportService:
             cursor_ms = 0
             for i in range(slide_count):
                 duration_ms = durations_ms[i]
+                if i in video_pages:
+                    cursor_ms += duration_ms
+                    continue
                 audio = audio_by_index.get(i)
                 audio_key = _normalize_audio_cache_path(getattr(audio, "audio_path", None))
                 cues_json = subtitle_cues_by_audio_path.get(audio_key)
@@ -521,21 +645,24 @@ class NarrationVideoExportService:
                     f.write(f"file '{str(Path(p).resolve())}'\n")
 
             merged_audio_path = os.path.join(tmp_dir, "merged_audio.m4a")
-            aac_args = [
-                "ffmpeg",
-                "-y",
-                "-f",
-                "concat",
-                "-safe",
-                "0",
-                "-i",
-                audio_list_path,
-                "-c:a",
-                "aac",
-                "-b:a",
-                "192k",
-                merged_audio_path,
-            ]
+            if video_pages:
+                aac_args = _concat_audio_with_video_pages_args(audio_paths, durations_ms, merged_audio_path)
+            else:
+                aac_args = [
+                    "ffmpeg",
+                    "-y",
+                    "-f",
+                    "concat",
+                    "-safe",
+                    "0",
+                    "-i",
+                    audio_list_path,
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "192k",
+                    merged_audio_path,
+                ]
             code, _, err = await _run_subprocess(aac_args)
             if code != 0:
                 last = (err.splitlines()[-1] if err else "").strip()
@@ -605,6 +732,8 @@ class NarrationVideoExportService:
             plans: List[Tuple[int, int, int, int]] = []
             # (index, duration_ms, usable_ms, record_total_ms)
             for i in range(slide_count):
+                if i in video_pages:
+                    continue
                 dur = int(durations_ms[i])
                 if record_mode == "full":
                     usable = max(500, min(dur, full_record_cap_ms))
@@ -748,6 +877,25 @@ class NarrationVideoExportService:
             for (i, dur_ms, usable_ms, _record_total_ms) in plans:
                 info = recorded_by_index[i]
                 trans_tasks.append(_transcode_one(i, info["path"], int(info["trim_ms"]), usable_ms, dur_ms))
+
+            async def _transcode_video_page(i: int) -> str:
+                out_mp4 = os.path.join(seg_dir, f"seg_{i}.mp4")
+                args = _explainer_video_segment_args(
+                    str(video_pages[i].video_path),
+                    out_mp4,
+                    fps=fps,
+                    width=width,
+                    height=height,
+                    duration_ms=durations_ms[i],
+                )
+                async with trans_sem:
+                    code, _, err = await _run_subprocess(args)
+                if code != 0:
+                    summary = _summarize_subprocess_stderr(err) or "unknown error"
+                    raise RuntimeError(f"ffmpeg explainer video transcode failed on slide {i+1} (rc={code}): {summary}")
+                return out_mp4
+
+            trans_tasks.extend(_transcode_video_page(i) for i in video_pages)
             seg_paths = await asyncio.gather(*trans_tasks)
 
             concat_list = os.path.join(tmp_dir, "video_concat.txt")
@@ -1341,6 +1489,7 @@ class NarrationVideoExportService:
                 uploads_dir=uploads_dir,
             )
             audio_by_index = {a.slide_index: a for a in audios}
+            video_pages = explainer_video_pages(project.slides_data)
 
             # 2) Get speech scripts to build subtitles
             scripts = await speech_repo.get_current_speech_scripts_by_project(project.project_id, language=language)
@@ -1357,6 +1506,8 @@ class NarrationVideoExportService:
             html_paths: Dict[int, str] = {}
             png_paths: Dict[int, str] = {}
             for i in range(slide_count):
+                if i in video_pages:
+                    continue
                 slide = project.slides_data[i] or {}
                 slide_html = self._prepare_slide_html_for_video_export(
                     slide.get("html_content", ""),
@@ -1396,7 +1547,7 @@ class NarrationVideoExportService:
                     )
                     return idx, ok
 
-            tasks = [asyncio.create_task(_render_one(i)) for i in range(slide_count)]
+            tasks = [asyncio.create_task(_render_one(i)) for i in html_paths]
             try:
                 for fut in asyncio.as_completed(tasks):
                     idx, ok = await fut
@@ -1411,6 +1562,15 @@ class NarrationVideoExportService:
                 await asyncio.gather(*tasks, return_exceptions=True)
 
             rendered_indices.sort()
+            # Explainer video pages are spliced in as their own MP4 (with original sound).
+            clip_indices = sorted([*rendered_indices, *video_pages])
+            video_durations_ms: Dict[int, int] = {}
+            video_audio_format: Optional[Tuple[int, int]] = None
+            if video_pages:
+                narration_audio = next((a for i, a in sorted(audio_by_index.items()) if i not in video_pages), None)
+                video_audio_format = (
+                    await _probe_audio_format(narration_audio.audio_path) if narration_audio else (48000, 2)
+                )
 
             # 4) Build per-slide clips
             clips_dir = os.path.join(tmp_dir, "clips")
@@ -1423,7 +1583,30 @@ class NarrationVideoExportService:
             except Exception:
                 subtitle_cues_by_audio_path = {}
 
-            for i in rendered_indices:
+            for i in clip_indices:
+                if i in video_pages:
+                    video_path = str(video_pages[i].video_path)
+                    duration_ms = int(await ffprobe_duration_ms(video_path) or 0)
+                    if duration_ms <= 0:
+                        return {"success": False, "error": f"Cannot determine explainer video duration for slide {i+1}"}
+                    video_durations_ms[i] = duration_ms
+                    clip_path = os.path.join(clips_dir, f"clip_{i}.mp4")
+                    code, _, err = await _run_subprocess(
+                        _explainer_video_segment_args(
+                            video_path,
+                            clip_path,
+                            fps=fps,
+                            width=width,
+                            height=height,
+                            duration_ms=duration_ms,
+                            audio_format=video_audio_format,
+                        )
+                    )
+                    if code != 0:
+                        last = (err.splitlines()[-1] if err else "").strip()
+                        return {"success": False, "error": f"ffmpeg explainer video clip failed on slide {i+1}: {last or 'unknown error'}"}
+                    clips.append(clip_path)
+                    continue
                 audio = audio_by_index.get(i)
                 if not audio or not audio.audio_path or not os.path.exists(audio.audio_path):
                     return {"success": False, "error": f"Missing narration audio for slide {i+1} (language={language})"}
@@ -1505,7 +1688,10 @@ class NarrationVideoExportService:
             # 6) Build SRT from cues_json (preferred) or script text (fallback)
             cursor_ms = 0
             all_cues: List[SubtitleCue] = []
-            for i in rendered_indices:
+            for i in clip_indices:
+                if i in video_pages:
+                    cursor_ms += video_durations_ms[i]
+                    continue
                 audio = audio_by_index.get(i)
                 duration_ms = int(audio.duration_ms or 0) if audio else 0
                 if duration_ms <= 0:
