@@ -112,7 +112,6 @@ def _split_by_headings(markdown: str, max_chars: int = 3000) -> List[Dict[str, s
 
 
 def _parse_pptx(path: Path) -> List[Dict[str, str]]:
-    # Seam for the PPTX-parsing branch: replace with its parser when merged.
     from markitdown import MarkItDown
 
     markdown = MarkItDown().convert(str(path)).text_content or ""
@@ -136,6 +135,9 @@ def _parse_pdf(path: Path) -> List[Dict[str, str]]:
 
 
 async def parse_upload_sections(path: Path, filename: str) -> List[Dict[str, Any]]:
+    # After the PPTX-parsing branch merges, replace the per-format branches below with
+    # ``await landppt.services.source_sections.parse_source_sections(str(path), filename)``
+    # (same {index, title, text} shape) and keep the empty-text filter.
     ext = Path(filename).suffix.lower()
     if ext == ".pptx":
         from ...utils.thread_pool import run_blocking_io
