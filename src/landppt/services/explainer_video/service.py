@@ -25,6 +25,13 @@ logger = logging.getLogger(__name__)
 
 TASK_TYPE = "explainer_video_generation"
 STAGE_PROGRESS = {"parse": 5, "script": 15, "tts": 35, "animation": 55, "render": 70}
+STAGE_MESSAGES = {
+    "parse": "正在读取内容…",
+    "script": "AI 正在撰写讲解稿…",
+    "tts": "正在生成配音…",
+    "animation": "正在制作动画画面…",
+    "render": "正在录制并合成视频…",
+}
 LEAD_SECONDS, GAP_SECONDS, TAIL_SECONDS = 0.6, 0.4, 0.8
 VIDEO_ARTIFACT_TYPE = "narration_video_export"  # library category "讲解视频"
 COVER_ARTIFACT_TYPE = "explainer_video_cover"
@@ -166,7 +173,7 @@ async def run_generation(
             task = manager.tasks.get(task_id)
             if task is not None:
                 task.metadata["stage"] = stage
-                task.metadata["progress_message"] = stage
+                task.metadata["progress_message"] = STAGE_MESSAGES[stage]
             await manager.update_task_status_async(task_id, TaskStatus.RUNNING, progress=STAGE_PROGRESS[stage])
         return video
 
