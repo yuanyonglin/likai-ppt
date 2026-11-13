@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, App, Button, Card, Empty, Flex, Input, Modal, Progress, Radio, Select, Space, Spin, Steps, Tag, Typography } from 'antd';
-import { CheckCircleFilled, CloseCircleFilled, DownloadOutlined, EditOutlined, LoadingOutlined, PlusSquareOutlined, PushpinOutlined, ReloadOutlined, VideoCameraOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined, CheckCircleFilled, CloseCircleFilled, DownloadOutlined, EditOutlined, LoadingOutlined, PlusSquareOutlined, PushpinOutlined, ReloadOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import { request, type ApiData } from '../api';
 import { modalFocus } from './modal-focus';
 import { SlideDocument } from './slide-document';
 import {
-  createExplainerApi, createExplainerTracker, explainerCoverFile, explainerResultURL, explainerStages, explainerVideoFile, formatClock, isExplainerRunning, parseExplainerVideoId,
-  recentExplainerVideos,
+  createExplainerApi, createExplainerTracker, explainerCoverFile, explainerResultURL, explainerStages, explainerVideoFile, formatClock, isExplainerActive, isExplainerRunning, newestExplainerFirst, parseExplainerVideoId,
   placementLabel, segmentStarts, sourceLabel, stageIndex, type ExplainerSegment, type ExplainerTracker, type ExplainerVideo, type TrackerState,
 } from '../controllers/explainer-video-controller';
 import './explainer-video.css';
@@ -164,18 +163,19 @@ export function ExplainerResult({ state, tracker, onPlaced, actions = true }: { 
 }
 
 /**
- * Home page list of recent explainer videos. Polls the running ones and announces
- * the moment one finishes, so leaving the studio page never hides the result.
+ * Home page explainer videos, newest first. Polls the ones still generating and
+ * announces the moment one finishes, so leaving the studio never hides the result.
  */
-export function useRecentExplainerVideos() {
+export function useExplainerVideos() {
   const { message } = App.useApp();
-  const [videos, setVideos] = useState<ExplainerVideo[]>([]);
-  const running = videos.filter(isExplainerRunning).map(video => video.id).join(',');
+  const [videos, setVideos] = useState<ExplainerVideo[]>([]), [version, setVersion] = useState(0);
+  const reload = useCallback(() => setVersion(value => value + 1), []);
+  const running = videos.filter(video => isExplainerActive(video)).map(video => video.id).join(',');
   useEffect(() => {
     const controller = new AbortController();
-    explainerApi.list(undefined, controller.signal).then(list => setVideos(recentExplainerVideos(list))).catch(() => { /* The task list is optional on the home page. */ });
+    explainerApi.list(undefined, controller.signal).then(list => setVideos(newestExplainerFirst(list))).catch(() => { /* The video list is optional on the home page. */ });
     return () => controller.abort();
-  }, []);
+  }, [version]);
   useEffect(() => {
     if (!running) return;
     const controller = new AbortController();
@@ -191,7 +191,31 @@ export function useRecentExplainerVideos() {
     }, 3000);
     return () => { controller.abort(); clearTimeout(timer); };
   }, [running, videos, message]);
-  return videos;
+  return { videos, reload };
+}
+
+/** Home page "讲解视频" mode: the generated videos in place of recent projects. */
+export function DashboardExplainerVideos({ videos }: { videos: ExplainerVideo[] }) {
+  const now = Date.now() / 1000;
+  return <section className="dashboard-recent" aria-labelledby="recentVideosTitle">
+    <div className="section-heading recent-projects-header"><h2 id="recentVideosTitle">最近讲解视频</h2><Button type="text" className="dashboard-all-projects" href="/image-gallery?tab=explainer">全部视频<ArrowRightOutlined aria-hidden /></Button></div>
+    <div className="dashboard-projects">{videos.length ? <ul>{videos.map(video => {
+      const href = explainerResultURL(video.id), title = video.title || '讲解视频';
+      const active = isExplainerActive(video, now), done = video.status === 'completed', failed = video.status === 'failed';
+      const status = done ? <Tag color="success">已生成</Tag> : active ? <Tag color="processing">生成中</Tag> : failed ? <Tag color="error">生成失败</Tag> : <Tag>未完成</Tag>;
+      const cover = <a className="dashboard-video-cover" href={href} aria-label={`打开讲解视频 ${title}`}>
+        {done ? <img src={coverUrl(video)} alt="" loading="lazy" /> : <span className="dashboard-video-pending">{active ? <><LoadingOutlined spin aria-hidden /> 生成中</> : failed ? '生成失败' : '生成未完成'}</span>}
+        {done && !!video.duration_ms && <span className="dashboard-video-duration">{formatClock(video.duration_ms / 1000)}</span>}
+      </a>;
+      return <li className="dashboard-project-item dashboard-video-item" key={video.id}><Card hoverable size="small" cover={cover}>
+        <Card.Meta title={<a className="project-title" href={href}>{title}</a>} description={sourceLabel(video)} />
+        {active && <div><Progress percent={video.progress || 0} size="small" strokeColor="var(--lp-primary)" /><span className="subtle">当前阶段：{explainerStages[Math.max(0, stageIndex(video.stage))][1]}</span></div>}
+        <Flex className="dashboard-project-footer" justify="space-between" align="center" gap={8}>{status}
+          <Space size={4}>{done && <Button size="small" type="text" href={videoUrl(video)} download={`${title}.mp4`} icon={<DownloadOutlined aria-hidden />} aria-label={`下载 ${title}`} />}
+            <Button size="small" href={href}>{done ? '查看视频' : active ? '查看进度' : '查看原因'}</Button></Space></Flex>
+      </Card></li>;
+    })}</ul> : <Empty image={<VideoCameraOutlined aria-hidden />} description="还没有讲解视频，在上面生成第一个" />}</div>
+  </section>;
 }
 
 export function DashboardExplainerTasks({ videos }: { videos: ExplainerVideo[] }) {

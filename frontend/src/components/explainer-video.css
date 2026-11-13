@@ -49,3 +49,8 @@
 .dashboard-video-status { display: flex; align-items: center; gap: 6px; font-weight: 550; }
 .dashboard-video-status.is-done { color: var(--lp-success); }
 .dashboard-video-status.is-failed { color: var(--lp-danger); }
+.dashboard-video-cover { position: relative; display: block; aspect-ratio: 16 / 9; background: #000; overflow: hidden; }
+.dashboard-video-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dashboard-video-pending { height: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; color: #fff; }
+.dashboard-video-duration { position: absolute; right: 8px; bottom: 8px; padding: 1px 6px; border-radius: 4px; background: rgba(0, 0, 0, .65); color: #fff; font-size: 12px; }
+.dashboard-video-item .ant-progress { margin: 0; }

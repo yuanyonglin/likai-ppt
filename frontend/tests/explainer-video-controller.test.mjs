@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildCreateBody, createExplainerApi, createExplainerTracker, explainerResultURL, formatClock, parseExplainerVideoId,
-  recentExplainerVideos,
+  isExplainerActive, newestExplainerFirst, recentExplainerVideos,
   placementLabel, placementOf, segmentStarts, sourceLabel, stageIndex, ttsChoices,
 } from '../src/controllers/explainer-video-controller.ts';
 
@@ -160,4 +160,6 @@ test('home page lists running videos and ones finished within a day, newest firs
   assert.deepEqual(recentExplainerVideos(list, now).map(video => video.id), ['pending', 'running', 'failed']);
   assert.deepEqual(recentExplainerVideos(list, now, 10).map(video => video.id), ['pending', 'running', 'failed', 'done']);
   assert.equal(explainerResultURL('a b'), '/dashboard?kind=video&explainer=a%20b');
+  assert.deepEqual(newestExplainerFirst(list).map(video => video.id), ['pending', 'running', 'failed', 'done', 'stuck', 'old-done']);
+  assert.deepEqual(list.filter(video => isExplainerActive(video, now)).map(video => video.id), ['running', 'pending']);
 });

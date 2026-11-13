@@ -33,16 +33,17 @@ export const explainerCoverFile = (id: string) => `/api/explainer-videos/${encod
 /** Home page studio opened on one video's progress or result (same link the notification uses). */
 export const explainerResultURL = (id: string) => `/dashboard?kind=video&explainer=${encodeURIComponent(id)}`;
 export const isExplainerRunning = (video: ExplainerVideo) => video.status === 'pending' || video.status === 'running';
+const explainerAge = (video: ExplainerVideo, nowSeconds: number) => nowSeconds - Number(video.updated_at || video.created_at || 0);
 /**
- * Videos for the home page task list: still generating, or finished in the last day.
- * A run interrupted by a restart stays "running" in the database; after 30 minutes
- * without a stage update it is no longer shown as in progress.
+ * Still generating. A run interrupted by a restart stays "running" in the database;
+ * after 30 minutes without a stage update it is no longer treated as in progress.
  */
+export const isExplainerActive = (video: ExplainerVideo, nowSeconds = Date.now() / 1000) => isExplainerRunning(video) && explainerAge(video, nowSeconds) < 30 * 60;
+export const newestExplainerFirst = (videos: ExplainerVideo[]) => [...videos].sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0));
+/** Videos for the home page task list: still generating, or finished in the last day. */
 export function recentExplainerVideos(videos: ExplainerVideo[], nowSeconds = Date.now() / 1000, limit = 3) {
-  const age = (video: ExplainerVideo) => nowSeconds - Number(video.updated_at || video.created_at || 0);
-  return videos
-    .filter(video => isExplainerRunning(video) ? age(video) < 30 * 60 : (video.status === 'completed' || video.status === 'failed') && age(video) < 24 * 3600)
-    .sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))
+  return newestExplainerFirst(videos)
+    .filter(video => isExplainerRunning(video) ? isExplainerActive(video, nowSeconds) : (video.status === 'completed' || video.status === 'failed') && explainerAge(video, nowSeconds) < 24 * 3600)
     .slice(0, limit);
 }
 export const stageIndex = (stage: unknown) => explainerStages.findIndex(([key]) => key === stage);

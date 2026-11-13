@@ -241,15 +241,19 @@ function ComposerForm({ data, compact }: { data: ApiData; compact: boolean }) {
   </div>;
 }
 
-export default function CreateComposer({ data, compact = false }: { data: ApiData; compact?: boolean }) {
-  const [kind, setKind] = useState(() => { const query = new URLSearchParams(location.search); return query.has('explainer') || query.get('kind') === 'video' ? 'video' : 'ppt'; });
+/** "video" when the page was opened on the explainer studio or one of its videos. */
+export const initialOutputKind = () => { const query = new URLSearchParams(location.search); return query.has('explainer') || query.get('kind') === 'video' ? 'video' : 'ppt'; };
+
+export default function CreateComposer({ data, compact = false, kind: shownKind, onKindChange, onExplainerVideo }: { data: ApiData; compact?: boolean; kind?: string; onKindChange?: (kind: string) => void; onExplainerVideo?: (videoId: string) => void }) {
+  const [ownKind, setOwnKind] = useState(initialOutputKind);
+  const kind = shownKind ?? ownKind;
   // The PPT form stays mounted while hidden so its draft and behavior are unchanged.
   return <>
-    <Flex justify="center" className="create-output-kind"><Segmented aria-label="产出类型" value={kind} onChange={value => setKind(String(value))} options={[
+    <Flex justify="center" className="create-output-kind"><Segmented aria-label="产出类型" value={kind} onChange={value => { setOwnKind(String(value)); onKindChange?.(String(value)); }} options={[
       { value: 'ppt', label: '📊 生成 PPT' }, { value: 'video', label: <>🎬 讲解视频 <Tag color="blue">新</Tag></> },
     ]} /></Flex>
     <div hidden={kind !== 'ppt'}><PptComposer data={data} compact={compact} /></div>
-    {kind === 'video' && <ExplainerStudio />}
+    {kind === 'video' && <ExplainerStudio onVideo={onExplainerVideo} />}
   </>;
 }
 

@@ -31,7 +31,7 @@ function setResumeParam(videoId: string) {
 }
 
 /** Home / create page "讲解视频" mode. Does not touch the PPT outline/todo flow. */
-export function ExplainerStudio() {
+export function ExplainerStudio({ onVideo }: { onVideo?: (videoId: string) => void } = {}) {
   const { message } = App.useApp();
   const [state, tracker] = useExplainerTracker();
   const tts = useTtsChoices();
@@ -42,7 +42,7 @@ export function ExplainerStudio() {
   const [options, setOptions] = useState<Omit<ExplainerOptions, 'tts_provider'> & { tts_provider?: string }>({ duration: '1m', voice: null, style: 'follow_ppt', subtitles: true });
   const [crumb, setCrumb] = useState(''), [heading, setHeading] = useState('');
   useEffect(() => { const id = new URLSearchParams(location.search).get('explainer'); if (id) tracker.track(id); }, [tracker]);
-  useEffect(() => { if (state.videoId) setResumeParam(state.videoId); }, [state.videoId]);
+  useEffect(() => { if (state.videoId) { setResumeParam(state.videoId); onVideo?.(state.videoId); } }, [state.videoId, onVideo]);
 
   async function parse(next: File) {
     const extension = next.name.split('.').pop()?.toLowerCase() || '';
