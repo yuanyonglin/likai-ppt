@@ -190,27 +190,16 @@ def test_account_popup_link_uses_same_document(ui_page, detail_project):
     assert not state["errors"]
 
 
-def test_navigation_refreshes_sponsor_entry_after_settings_change(ui_page):
+def test_navigation_never_shows_sponsor_entry(ui_page):
     page, _ = ui_page
-    public = {"sponsor_page_enabled": False}
-    page.route("**/api/community/public-settings", lambda route: route.fulfill(json=public))
+    page.route("**/api/community/public-settings", lambda route: route.fulfill(json={"sponsor_page_enabled": True}))
     state = navigation_app(page)
-    state["values"]["user"] = dict(username="sponsor-reader", is_admin=False)
+    state["values"]["user"] = dict(username="sponsor-reader", is_admin=True)
     page.goto("http://ui.test/dashboard", wait_until="networkidle")
     expect(page.get_by_role("heading", name="首页", exact=True)).to_be_visible()
     expect(page.locator("#navSponsorLink")).to_have_count(0)
-    page.evaluate("window.sponsorHeader = document.querySelector('.app-header')")
-    public["sponsor_page_enabled"] = True
     open_navigation(page, "/projects")
-    expect(page.locator("#navSponsorLink")).to_have_text("赞助感谢")
-    public["sponsor_page_enabled"] = False
-    open_navigation(page, "/create")
     expect(page.locator("#navSponsorLink")).to_have_count(0)
-    public["sponsor_page_enabled"] = True
-    page.evaluate("document.dispatchEvent(new CustomEvent('landppt:navigate', {detail: '/create', cancelable: true}))")
-    expect(page).to_have_url("http://ui.test/create")
-    expect(page.locator("#navSponsorLink")).to_have_text("赞助感谢")
-    assert page.evaluate("window.sponsorHeader === document.querySelector('.app-header')")
     assert not state["errors"]
 
 
