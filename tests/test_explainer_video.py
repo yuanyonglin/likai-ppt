@@ -265,6 +265,14 @@ def _stub_pipeline(monkeypatch, seen, fail_stage=None):
     monkeypatch.setattr(service, "store_outputs", store)
 
 
+async def _notifications(sessions):
+    from sqlalchemy import select
+    from landppt.database.models import Notification
+
+    async with sessions() as session:
+        return (await session.scalars(select(Notification))).all()
+
+
 def _watch_status(sessions, seen):
     """Record (status, stage) every time the row is committed."""
     from sqlalchemy import event
@@ -312,6 +320,10 @@ async def test_generation_walks_stages_and_completes(sessions, monkeypatch):
     rows, *_ = await _state(sessions)
     assert parse_explainer_video_id(rows[2].html_content) == "vid-2"
 
+    notes = await _notifications(sessions)
+    assert [(n.level, n.link_url) for n in notes] == [("success", "/dashboard?kind=video&explainer=vid-2")]
+    assert notes[0].title.startswith("讲解视频已生成")
+
     html = next(item[1] for item in seen if item[0] == "html")
     assert "window.__start" in html and "第三句" in html and "#C00000" in html
     assert "http://" not in html and "https://" not in html and "<link" not in html
@@ -329,6 +341,8 @@ async def test_generation_failure_records_error_and_stage(sessions, monkeypatch)
     async with sessions() as session:
         video = await session.get(ExplainerVideo, "vid-3")
     assert (video.status, video.stage, video.error) == ("failed", "script", "model down")
+    notes = await _notifications(sessions)
+    assert [(n.level, n.title, n.body) for n in notes] == [("error", "讲解视频生成失败：讲解视频", "model down")]
 
 
 def test_cues_follow_segment_timing_and_html_escapes_text():

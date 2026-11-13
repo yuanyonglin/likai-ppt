@@ -66,6 +66,7 @@ def serialize(video: ExplainerVideo, placements: Optional[List[Dict[str, Any]]] 
         "placements": placements or [],
         "created_at": video.created_at,
         "updated_at": video.updated_at,
+        "updated_at": video.updated_at,
     }
 
 
@@ -147,6 +148,36 @@ async def _auto_place(session_factory, video_id: str) -> Optional[str]:
         except PlacementError as exc:
             return f"自动加入 PPT 失败：{exc.message}"
     return None
+
+
+def result_url(video_id: str) -> str:
+    """Home page studio opened on this video's progress or result."""
+    return f"/dashboard?kind=video&explainer={video_id}"
+
+
+async def _notify(session_factory, video_id: str, *, ok: bool) -> None:
+    """In-app notification for a finished run; best-effort like every other notification."""
+    from ...database.repositories import NotificationRepository
+
+    try:
+        async with session_factory() as session:
+            video = await session.get(ExplainerVideo, video_id)
+            title = video.title or "讲解视频"
+            await NotificationRepository(session).create({
+                "id": str(uuid.uuid4()),
+                "user_id": video.user_id,
+                "project_id": video.project_id,
+                "notification_type": "explainer_video",
+                "level": "success" if ok else "error",
+                "title": f"讲解视频已生成：{title}" if ok else f"讲解视频生成失败：{title}",
+                "body": (video.error or "点击查看视频，可播放、下载或加入 PPT。") if ok else (video.error or "未知错误"),
+                "link_url": result_url(video_id),
+                "payload": {"video_id": video_id},
+                "is_read": False,
+                "created_at": time.time(),
+            })
+    except Exception:  # noqa: BLE001 - a notification must not fail the video
+        logger.warning("Failed to notify explainer video %s", video_id, exc_info=True)
 
 
 async def run_generation(
@@ -238,6 +269,7 @@ async def run_generation(
         placement_error = await _auto_place(factory, video_id)
         if placement_error:
             await update(error=placement_error)
+        await _notify(factory, video_id, ok=True)
         return {"success": True, "video_id": video_id, "duration_ms": int(total * 1000)}
     except asyncio.CancelledError:
         await update(status="failed", error="任务被取消")
@@ -245,6 +277,7 @@ async def run_generation(
     except Exception as exc:
         logger.exception("Explainer video %s failed", video_id)
         await update(status="failed", error=str(exc) or exc.__class__.__name__)
+        await _notify(factory, video_id, ok=False)
         raise
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
