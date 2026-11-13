@@ -7,7 +7,9 @@ their MP4 and cover live in ``explainer_videos.video_path/cover_path``.
 
 from __future__ import annotations
 
+import asyncio
 import html
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
@@ -42,13 +44,35 @@ def _query_video_files(video_id: str) -> Optional[tuple[str, str]]:
         db.close()
 
 
+def _local_file(video_id: str, key: str) -> Path:
+    """Map an artifact storage key to a local file; remote storage is downloaded into a cache."""
+    from ..storage.factory import get_artifact_storage
+    from ..storage.local_storage import LocalArtifactStorage
+
+    storage = get_artifact_storage()
+    if isinstance(storage, LocalArtifactStorage):
+        return storage._path_for_key(key)
+    target = PROJECT_ROOT / "temp" / "explainer_video_cache" / video_id / Path(key).name
+    if not target.is_file():
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        async def download():
+            with open(target, "wb") as handle:
+                async for chunk in storage.open_stream(key):
+                    handle.write(chunk)
+
+        # Callers are synchronous and may sit inside a running event loop.
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(asyncio.run, download()).result()
+    return target
+
+
 def load_explainer_video_asset(video_id: str) -> ExplainerVideoAsset:
     """Resolve a video id to existing local files; raise when the video cannot be exported."""
     row = _query_video_files(video_id)
     if row is None or not row[0] or not row[1]:
         raise FileNotFoundError(f"Explainer video {video_id} has no rendered video/cover")
-    # Relative paths are relative to the project root, like narration audio files.
-    video_path, cover_path = (PROJECT_ROOT / row[0]), (PROJECT_ROOT / row[1])
+    video_path, cover_path = _local_file(video_id, row[0]), _local_file(video_id, row[1])
     for path in (video_path, cover_path):
         if not path.is_file():
             raise FileNotFoundError(f"Explainer video {video_id} file missing: {path}")

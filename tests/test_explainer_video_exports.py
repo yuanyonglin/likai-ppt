@@ -40,6 +40,7 @@ def video_files(tmp_path, monkeypatch):
         return assets.ExplainerVideoAsset(video_id, video, cover)
 
     monkeypatch.setattr(assets, "_query_video_files", rows.get)
+    monkeypatch.setattr(assets, "_local_file", lambda video_id, key: Path(key))
     return add
 
 
@@ -50,8 +51,11 @@ def test_parse_explainer_video_id():
     assert parse_explainer_video_id("") is None
 
 
-def test_asset_paths_resolve_relative_to_project_root_and_missing_files_fail(monkeypatch, tmp_path):
-    monkeypatch.setattr(assets, "PROJECT_ROOT", tmp_path)
+def test_asset_paths_resolve_through_artifact_storage_and_missing_files_fail(monkeypatch, tmp_path):
+    from landppt.services.storage import factory
+    from landppt.services.storage.local_storage import LocalArtifactStorage
+
+    monkeypatch.setattr(factory, "get_artifact_storage", lambda: LocalArtifactStorage(root=str(tmp_path)))
     (tmp_path / "uploads").mkdir()
     (tmp_path / "uploads/v.mp4").write_bytes(b"v")
     (tmp_path / "uploads/c.png").write_bytes(b"c")
@@ -59,7 +63,7 @@ def test_asset_paths_resolve_relative_to_project_root_and_missing_files_fail(mon
     monkeypatch.setattr(assets, "_query_video_files", rows.get)
 
     asset = assets.load_explainer_video_asset("ok")
-    assert asset.video_path == tmp_path / "uploads/v.mp4"
+    assert asset.video_path == (tmp_path / "uploads/v.mp4").resolve()
     with pytest.raises(FileNotFoundError, match="missing.png"):
         assets.load_explainer_video_asset("gone")
     with pytest.raises(FileNotFoundError, match="unknown"):
@@ -362,3 +366,17 @@ async def test_narration_video_fails_when_explainer_video_missing(narration_expo
             project=project, language="zh", fps=30, width=320, height=180, embed_subtitles=False,
             subtitle_style=None, uploads_dir=str(tmp_path / "uploads"),
         )
+
+
+def test_remote_storage_files_are_downloaded_into_cache(monkeypatch, tmp_path):
+    from landppt.services.storage import factory
+
+    class RemoteStorage:
+        async def open_stream(self, key):
+            yield f"bytes-of-{key}".encode()
+
+    monkeypatch.setattr(factory, "get_artifact_storage", lambda: RemoteStorage())
+    monkeypatch.setattr(assets, "PROJECT_ROOT", tmp_path)
+    path = assets._local_file("vid", "users/1/v.mp4")
+    assert path == tmp_path / "temp/explainer_video_cache/vid/v.mp4"
+    assert path.read_bytes() == b"bytes-of-users/1/v.mp4"

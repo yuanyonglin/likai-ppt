@@ -358,6 +358,7 @@ def explainer_video(tmp_path, monkeypatch):
     video.write_bytes(b"\x00\x00\x00\x18ftypmp42-explainer")
     Image.new("RGB", (192, 108), (200, 0, 0)).save(cover)
     monkeypatch.setattr(explainer_video_assets, "_query_video_files", {"v1": (str(video), str(cover))}.get)
+    monkeypatch.setattr(explainer_video_assets, "_local_file", lambda video_id, key: Path(key))
     return video, cover
 
 
